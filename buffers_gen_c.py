@@ -526,6 +526,7 @@ def generate_c(header_path, prefix, structs):
 BUFFERS_H_CONTENT = r"""#ifndef HTCW_BUFFERS_H
 #define HTCW_BUFFERS_H
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>  /* memcpy */
 #ifdef __cplusplus
 extern "C" {
@@ -564,7 +565,7 @@ int buffers_read_long          (long*               result, buffers_read_callbac
 int buffers_read_unsigned_long (unsigned long*      result, buffers_read_callback_t cb, void* state);
 int buffers_read_long_long         (long long*          result, buffers_read_callback_t cb, void* state);
 int buffers_read_unsigned_long_long(unsigned long long* result, buffers_read_callback_t cb, void* state);
-int buffers_read_bool          (int*                result, buffers_read_callback_t cb, void* state);
+int buffers_read_bool          (bool*               result, buffers_read_callback_t cb, void* state);
 int buffers_read_wchar_t       (wchar_t*            result, buffers_read_callback_t cb, void* state);
 int buffers_read_size_t        (size_t*             result, buffers_read_callback_t cb, void* state);
 
@@ -604,7 +605,7 @@ int buffers_write_long          (long               value, buffers_write_callbac
 int buffers_write_unsigned_long (unsigned long      value, buffers_write_callback_t cb, void* state);
 int buffers_write_long_long         (long long          value, buffers_write_callback_t cb, void* state);
 int buffers_write_unsigned_long_long(unsigned long long value, buffers_write_callback_t cb, void* state);
-int buffers_write_bool          (int                value, buffers_write_callback_t cb, void* state);
+int buffers_write_bool          (bool               value, buffers_write_callback_t cb, void* state);
 int buffers_write_wchar_t       (wchar_t            value, buffers_write_callback_t cb, void* state);
 int buffers_write_size_t        (size_t             value, buffers_write_callback_t cb, void* state);
 
@@ -917,10 +918,10 @@ int buffers_read_unsigned_long_long(unsigned long long* r, buffers_read_callback
 int buffers_write_unsigned_long_long(unsigned long long v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint64_t((uint64_t)v, cb, s); }
 
-int buffers_read_bool(int* r, buffers_read_callback_t cb, void* s) {
+int buffers_read_bool(bool* r, buffers_read_callback_t cb, void* s) {
     uint8_t tmp; int res = buffers_read_uint8_t(&tmp, cb, s); if (res < 0) return res;
     *r = tmp ? 1 : 0; return 0; }
-int buffers_write_bool(int v, buffers_write_callback_t cb, void* s) {
+int buffers_write_bool(bool v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint8_t(v ? 1 : 0, cb, s); }
 
 int buffers_read_wchar_t(wchar_t* r, buffers_read_callback_t cb, void* s) {
