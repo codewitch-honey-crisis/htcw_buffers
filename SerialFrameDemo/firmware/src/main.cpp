@@ -2,11 +2,14 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_idf_version.h"
+#include "esp_random.h"
 #include "esp_system.h"
+#include "esp_mac.h"
+#include "driver/gpio.h"
 #include <memory.h>
 #include <stdio.h>
 #include "serial.hpp"
-#include "example_buffers.h"
+#include "interface_buffers.h"
 static void loop();
 static void loop_task(void* arg) {
     TickType_t wdt_ts = xTaskGetTickCount();
@@ -51,80 +54,116 @@ int on_read_buffer(void* state) {
     return result;
 }
 static void loop() {
-    static uint8_t msg_buffer[EXAMPLE_MAX_SIZE];
+    static uint8_t msg_buffer[INTERFACE_MAX_SIZE];
     serial_update();
     uint8_t cmd;
     void* ptr;
     size_t length;
     if(serial_try_get_frame(&cmd,&ptr,&length)) {
-        buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
-        switch((example_message_command_t)cmd) {
-            case CMD_NOP: {
-                example_nop_message_t msg;
-                if(-1<example_read_example_nop_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("NOP received");
+        switch((st_message_command_t)cmd) {
+            case CMD_ESP_IDF_VERSION: {
+                st_esp_idf_version_message_t msg;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_esp_idf_version_message(&msg,on_read_buffer,&read_cur)) {
+                    puts("ESP-IDF version requested");
+                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    st_esp_idf_version_response_message_t resp;
+                    strcpy(resp.version,esp_get_idf_version());
+                    resp.major = ESP_IDF_VERSION_MAJOR;
+                    resp.minor = ESP_IDF_VERSION_MINOR;
+                    resp.patch = ESP_IDF_VERSION_PATCH;
+                    interface_write_st_esp_idf_version_response_message(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,INTERFACE_ST_ESP_IDF_VERSION_RESPONSE_MESSAGE_SIZE);
                 }
             }
             break;
-            case CMD_SCREEN: {
-                example_screen_message_t msg;
-                if(-1<example_read_example_screen_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("Screen received");
+            case CMD_RNG: {
+                st_rng_message_t msg;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_rng_message(&msg,on_read_buffer,&read_cur)) {
+                    puts("RNG generation requested");
+                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    st_rng_response_message_t resp;
+                    resp.value = esp_random();
+                    interface_write_st_rng_response_message(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,INTERFACE_ST_RNG_RESPONSE_MESSAGE_SIZE);
                 }
             }
             break;
-            case CMD_DATA: {
-                example_data_message_t msg;
-                if(-1<example_read_example_data_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("Data received");
+            case CMD_GPIO_GET: {
+                st_gpio_get_message_t msg;
+                uint64_t result = 0;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_gpio_get_message(&msg,on_read_buffer,&read_cur)) {
+                    for(int i = 0; i<64;++i) {
+                        if(0!=(msg.mask & (((uint64_t)1)<<i))) {
+                            printf("GPIO get request for %d\n",(int)i);
+                            if(gpio_get_level((gpio_num_t)i)) {
+                                result |= (((uint64_t)1)<<i);
+                            }
+                        }
+                    }
+                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    st_gpio_get_response_message_t resp;
+                    resp.values = result;
+                    interface_write_st_gpio_get_response_message(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,INTERFACE_ST_GPIO_GET_RESPONSE_MESSAGE_SIZE);
                 }
             }
             break;
-            case CMD_IDENT_REQUEST: {
-                example_ident_request_message_t msg;
-                if(-1<example_read_example_ident_request_message(&msg,on_read_buffer,&read_cur)) {
-                    buffer_write_cursor_t write_cur = {EXAMPLE_MAX_SIZE,msg_buffer};
-                    example_ident_message_t ident;
-                    memset(&ident,0,sizeof(ident));
-                    ident.build = 01234567;
-                    ident.id=32768;
-                    ident.version_major = 4;
-                    ident.version_minor = 0;
-                    ident.dpi = 96.f;
-                    ident.pixel_size = 1.f;
-                    ident.input_type = INPUT_TOUCH;
-                    ident.is_monochrome = false;
-                    ident.horizontal_resolution = 320;
-                    ident.vertical_resolution = 240;
-                    strcpy(ident.display_name,"Test Display Name");
-                    strcpy(ident.slug,"test-slug");
-                    memcpy(ident.mac_address,(uint8_t[]){1,2,3,4,5,6},6);
-                    if(-1<example_write_example_ident_message(&ident,on_write_buffer,&write_cur)) {
-                        if(!serial_put_frame(CMD_IDENT,msg_buffer,EXAMPLE_EXAMPLE_IDENT_MESSAGE_SIZE)) {
-                            puts("Write error");
+            case CMD_GPIO_SET: {
+                st_gpio_set_message_t msg;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_gpio_set_message(&msg,on_read_buffer,&read_cur)) {
+                    for(int i = 0; i<64;++i) {
+                        if(0!=(msg.mask & (((uint64_t)1)<<i))) {
+                            printf("GPIO set level request for %d\n",(int)i);
+                            gpio_set_level((gpio_num_t)i,!!(msg.values&(((uint64_t)1)<<i)));
                         }
                     }
                 }
             }
             break;
-            case CMD_MODE: {
-                example_mode_message_t msg;
-                if(-1<example_read_example_mode_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("Mode received");
+            case CMD_GPIO_MODE: {
+                st_gpio_mode_message_t msg;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_gpio_mode_message(&msg,on_read_buffer,&read_cur)) {
+                    printf("GPIO set mode for %d\n",(int)msg.gpio);
+                    switch(msg.mode) {
+                        case MODE_INPUT:
+                            gpio_set_direction((gpio_num_t)msg.gpio,GPIO_MODE_INPUT);
+                            gpio_set_pull_mode((gpio_num_t)msg.gpio,GPIO_FLOATING);
+                            break;
+                        case MODE_INPUT_PULLUP:
+                            gpio_set_direction((gpio_num_t)msg.gpio,GPIO_MODE_INPUT);
+                            gpio_set_pull_mode((gpio_num_t)msg.gpio,GPIO_PULLUP_ONLY);
+                            break;
+                        case MODE_INPUT_PULLDOWN:
+                            gpio_set_direction((gpio_num_t)msg.gpio,GPIO_MODE_INPUT);
+                            gpio_set_pull_mode((gpio_num_t)msg.gpio,GPIO_PULLDOWN_ONLY);
+                            break;
+                        case MODE_OUTPUT:
+                            gpio_set_direction((gpio_num_t)msg.gpio,GPIO_MODE_OUTPUT);
+                            break;
+                        case MODE_OUTPUT_OPEN_DRAIN:
+                            gpio_set_direction((gpio_num_t)msg.gpio,GPIO_MODE_OUTPUT_OD);
+                            break;
+                    }
+                    
                 }
             }
             break;
-            case CMD_RESET_SCREEN: {
-                example_reset_screen_message_t msg;
-                if(-1<example_read_example_reset_screen_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("Reset screen received");
-                }
-            }
-            break;
-            case CMD_CLEAR: {
-                example_clear_message_t msg;
-                if(-1<example_read_example_clear_message(&msg,on_read_buffer,&read_cur)) {
-                    puts("Clear received");
+            case CMD_MAC_ADDRESS: {
+                st_mac_address_message_t msg;
+                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                if(-1<interface_read_st_mac_address_message(&msg,on_read_buffer,&read_cur)) {
+                    puts("MAC Address requested");
+                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    st_mac_address_response_message_t resp;
+                    memset(&resp,0,sizeof(resp));
+                    esp_read_mac(resp.address,ESP_MAC_BASE);
+                    interface_write_st_mac_address_response_message(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,INTERFACE_ST_MAC_ADDRESS_RESPONSE_MESSAGE_SIZE);
                 }
             }
             break;

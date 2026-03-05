@@ -4,4 +4,4 @@ Import("env")
 
 print("htcw_buffers integration enabled")
 
-env.Execute("python buffers_gen_c.py --buffers --out .\src .\include\example.h")
+env.Execute("python buffers_gen_c.py --buffers --out .\src .\include\interface.h")

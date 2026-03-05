@@ -3,6 +3,7 @@ using Microsoft.Win32.SafeHandles;
 
 using System.Buffers.Binary;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -50,7 +51,7 @@ internal partial class EspSerialSession : IDisposable
         public void Reset() => state = 0;
         public bool Step(List<byte>? log, object? logLock, byte data)
         {
-            if (state == 0 || state ==16)
+            if (state == 0)
             {
                 if (data <128)
                 {
@@ -73,6 +74,7 @@ internal partial class EspSerialSession : IDisposable
                 {
                     if (logLock != null)
                     {
+                        
                         lock (logLock)
                         {
                             for (var i = 0; i<state;++i)
@@ -473,7 +475,7 @@ internal partial class EspSerialSession : IDisposable
                 while (!_closing)
                 {
                     await ReadExactlyAsync(tmp, 1);
-                    mach.Step(_log, _lock, tmp[0]);
+                    mach.Step(_log, logging?_lock:null, tmp[0]);
                     if (mach.IsDone)
                     {
                         if (_closing) break;

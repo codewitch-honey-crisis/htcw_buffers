@@ -12,16 +12,25 @@ namespace SerialFrameDemo;
 enum STMessageCommand : byte
 {
     CmdNone = 0,
-    CmdReqEspIdf = 1,
-    CmdReqGetGpio = 2,
-    CmdReqSetGpio = 3,
-    CmdReqRng = 4,
-    CmdReqMac = 5,
-    CmdEspIdf = 6,
-    CmdGpio = 7,
-    CmdRng = 8,
-    CmdMac = 9,
-    CmdNop = 10,
+    CmdEspIdfVersion = 1,
+    CmdRng = 2,
+    CmdGpioMode = 3,
+    CmdGpioGet = 4,
+    CmdGpioSet = 5,
+    CmdMacAddress = 6,
+    CmdEspIdfVersionResponse = 7,
+    CmdRngResponse = 8,
+    CmdGpioGetResponse = 9,
+    CmdMacAddressResponse = 10,
+}
+
+enum STGpioMode : byte
+{
+    ModeInput = 0,
+    ModeInputPullup = 1,
+    ModeInputPulldown = 2,
+    ModeOutput = 3,
+    ModeOutputOpenDrain = 4,
 }
 
 struct InterfaceMaxSize
@@ -29,21 +38,21 @@ struct InterfaceMaxSize
     internal const int Value = 67;
 }
 
-partial class STReqEspIdfMessage
+partial class STEspIdfVersionMessage
 {
     internal const int SizeOfStruct = 0;
 
 
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STReqEspIdfMessage result, out int bytesRead)
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STEspIdfVersionMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STReqEspIdfMessage();
+        result = new STEspIdfVersionMessage();
         int offset = 0;
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteCore(Span<byte> span, STReqEspIdfMessage value, out int bytesWritten)
+    private static bool TryWriteCore(Span<byte> span, STEspIdfVersionMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
@@ -51,16 +60,16 @@ partial class STReqEspIdfMessage
         return true;
     }
 
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STReqEspIdfMessage result, out int bytesRead)
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STEspIdfVersionMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STReqEspIdfMessage();
+        result = new STEspIdfVersionMessage();
         int offset = 0;
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteBECore(Span<byte> span, STReqEspIdfMessage value, out int bytesWritten)
+    private static bool TryWriteBECore(Span<byte> span, STEspIdfVersionMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
@@ -68,27 +77,27 @@ partial class STReqEspIdfMessage
         return true;
     }
 
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STReqEspIdfMessage result, out int bytesRead)
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STEspIdfVersionMessage result, out int bytesRead)
     {
         return TryReadCore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Span<byte> destination, STReqEspIdfMessage value, out int bytesWritten)
+    internal static bool TryWrite(Span<byte> destination, STEspIdfVersionMessage value, out int bytesWritten)
     {
         return TryWriteCore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STReqEspIdfMessage result, out int bytesRead)
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STEspIdfVersionMessage result, out int bytesRead)
     {
         return TryReadBECore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Span<byte> destination, STReqEspIdfMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Span<byte> destination, STEspIdfVersionMessage value, out int bytesWritten)
     {
         return TryWriteBECore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryRead(Stream stream, out STReqEspIdfMessage result, out int bytesRead)
+    internal static bool TryRead(Stream stream, out STEspIdfVersionMessage result, out int bytesRead)
     {
         Span<byte> buf = stackalloc byte[0];
         int n = stream.Read(buf);
@@ -96,7 +105,7 @@ partial class STReqEspIdfMessage
         return TryReadCore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Stream stream, STReqEspIdfMessage value, out int bytesWritten)
+    internal static bool TryWrite(Stream stream, STEspIdfVersionMessage value, out int bytesWritten)
     {
         Span<byte> buf = stackalloc byte[0];
         if (!TryWriteCore(buf, value, out bytesWritten)) return false;
@@ -104,7 +113,7 @@ partial class STReqEspIdfMessage
         return true;
     }
 
-    internal static bool TryReadBE(Stream stream, out STReqEspIdfMessage result, out int bytesRead)
+    internal static bool TryReadBE(Stream stream, out STEspIdfVersionMessage result, out int bytesRead)
     {
         Span<byte> buf = stackalloc byte[0];
         int n = stream.Read(buf);
@@ -112,671 +121,9 @@ partial class STReqEspIdfMessage
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Stream stream, STReqEspIdfMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Stream stream, STEspIdfVersionMessage value, out int bytesWritten)
     {
         Span<byte> buf = stackalloc byte[0];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STReqGetGpioMessage
-{
-    internal const int SizeOfStruct = 8;
-
-    internal ulong Mask { get; set; }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqGetGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Mask);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqGetGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Mask);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        int n = stream.Read(buf);
-        if (n < 8) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STReqGetGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        int n = stream.Read(buf);
-        if (n < 8) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STReqGetGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STReqSetGpioMessage
-{
-    internal const int SizeOfStruct = 16;
-
-    internal ulong Mask { get; set; }
-    internal ulong Levels { get; set; }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqSetGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
-        offset += 8;
-        if (span.Length - offset < 8) return false;
-        result.Levels = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Mask);
-        offset += 8;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Levels);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqSetGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
-        offset += 8;
-        if (span.Length - offset < 8) return false;
-        result.Levels = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Mask);
-        offset += 8;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Levels);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[16];
-        int n = stream.Read(buf);
-        if (n < 16) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[16];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STReqSetGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[16];
-        int n = stream.Read(buf);
-        if (n < 16) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STReqSetGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[16];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STReqRngMessage
-{
-    internal const int SizeOfStruct = 0;
-
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STReqRngMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqRngMessage();
-        int offset = 0;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STReqRngMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STReqRngMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqRngMessage();
-        int offset = 0;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STReqRngMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STReqRngMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STReqRngMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STReqRngMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STReqRngMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STReqRngMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STReqRngMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STReqRngMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STReqRngMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STReqMacMessage
-{
-    internal const int SizeOfStruct = 0;
-
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STReqMacMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqMacMessage();
-        int offset = 0;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STReqMacMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STReqMacMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STReqMacMessage();
-        int offset = 0;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STReqMacMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STReqMacMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STReqMacMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STReqMacMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STReqMacMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STReqMacMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STReqMacMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STReqMacMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STReqMacMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[0];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STEspIdfMessage
-{
-    internal const int SizeOfStruct = 67;
-
-    internal string Version { get; set; }
-    internal byte Major { get; set; }
-    internal byte Minor { get; set; }
-    internal byte Patch { get; set; }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STEspIdfMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STEspIdfMessage();
-        int offset = 0;
-        if (span.Length - offset < 64) return false;
-        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
-        offset += 64;
-        if (span.Length - offset < 1) return false;
-        result.Major = span[offset];
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        result.Minor = span[offset];
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        result.Patch = span[offset];
-        offset += 1;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STEspIdfMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 64) return false;
-        Buffers.EncodeUtf8(value.Version, span.Slice(offset, 64));
-        offset += 64;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Major;
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Minor;
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Patch;
-        offset += 1;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STEspIdfMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STEspIdfMessage();
-        int offset = 0;
-        if (span.Length - offset < 64) return false;
-        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
-        offset += 64;
-        if (span.Length - offset < 1) return false;
-        result.Major = span[offset];
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        result.Minor = span[offset];
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        result.Patch = span[offset];
-        offset += 1;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STEspIdfMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 64) return false;
-        Buffers.EncodeUtf8(value.Version, span.Slice(offset, 64));
-        offset += 64;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Major;
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Minor;
-        offset += 1;
-        if (span.Length - offset < 1) return false;
-        span[offset] = value.Patch;
-        offset += 1;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STEspIdfMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STEspIdfMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STEspIdfMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STEspIdfMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STEspIdfMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[67];
-        int n = stream.Read(buf);
-        if (n < 67) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STEspIdfMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[67];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STEspIdfMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[67];
-        int n = stream.Read(buf);
-        if (n < 67) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STEspIdfMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[67];
-        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-partial class STGpioMessage
-{
-    internal const int SizeOfStruct = 8;
-
-    internal ulong Levels { get; set; }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Levels = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteCore(Span<byte> span, STGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Levels);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STGpioMessage result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new STGpioMessage();
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        result.Levels = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
-        offset += 8;
-        bytesRead = offset;
-        return true;
-    }
-
-    private static bool TryWriteBECore(Span<byte> span, STGpioMessage value, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Levels);
-        offset += 8;
-        bytesWritten = offset;
-        return true;
-    }
-
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STGpioMessage result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Span<byte> destination, STGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteCore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STGpioMessage result, out int bytesRead)
-    {
-        return TryReadBECore(span, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Span<byte> destination, STGpioMessage value, out int bytesWritten)
-    {
-        return TryWriteBECore(destination, value, out bytesWritten);
-    }
-
-    internal static bool TryRead(Stream stream, out STGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        int n = stream.Read(buf);
-        if (n < 8) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWrite(Stream stream, STGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-    internal static bool TryReadBE(Stream stream, out STGpioMessage result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        int n = stream.Read(buf);
-        if (n < 8) { result = null; bytesRead = n; return false; }
-        return TryReadBECore(buf, out result, out bytesRead);
-    }
-
-    internal static bool TryWriteBE(Stream stream, STGpioMessage value, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[8];
         if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -786,18 +133,14 @@ partial class STGpioMessage
 
 partial class STRngMessage
 {
-    internal const int SizeOfStruct = 4;
+    internal const int SizeOfStruct = 0;
 
-    internal uint Value { get; set; }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STRngMessage result, out int bytesRead)
     {
         bytesRead = 0;
         result = new STRngMessage();
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        result.Value = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset));
-        offset += 4;
         bytesRead = offset;
         return true;
     }
@@ -806,9 +149,6 @@ partial class STRngMessage
     {
         bytesWritten = 0;
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(offset), value.Value);
-        offset += 4;
         bytesWritten = offset;
         return true;
     }
@@ -818,9 +158,6 @@ partial class STRngMessage
         bytesRead = 0;
         result = new STRngMessage();
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        result.Value = BinaryPrimitives.ReadUInt32BigEndian(span.Slice(offset));
-        offset += 4;
         bytesRead = offset;
         return true;
     }
@@ -829,9 +166,6 @@ partial class STRngMessage
     {
         bytesWritten = 0;
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        BinaryPrimitives.WriteUInt32BigEndian(span.Slice(offset), value.Value);
-        offset += 4;
         bytesWritten = offset;
         return true;
     }
@@ -858,15 +192,15 @@ partial class STRngMessage
 
     internal static bool TryRead(Stream stream, out STRngMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[4];
+        Span<byte> buf = stackalloc byte[0];
         int n = stream.Read(buf);
-        if (n < 4) { result = null; bytesRead = n; return false; }
+        if (n < 0) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
     internal static bool TryWrite(Stream stream, STRngMessage value, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[4];
+        Span<byte> buf = stackalloc byte[0];
         if (!TryWriteCore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -874,13 +208,701 @@ partial class STRngMessage
 
     internal static bool TryReadBE(Stream stream, out STRngMessage result, out int bytesRead)
     {
+        Span<byte> buf = stackalloc byte[0];
+        int n = stream.Read(buf);
+        if (n < 0) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STRngMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[0];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STGpioGetMessage
+{
+    internal const int SizeOfStruct = 8;
+
+    internal ulong Mask { get; set; }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioGetMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioGetMessage();
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        offset += 8;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STGpioGetMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Mask);
+        offset += 8;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STGpioGetMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioGetMessage();
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
+        offset += 8;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STGpioGetMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Mask);
+        offset += 8;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STGpioGetMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STGpioGetMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STGpioGetMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STGpioGetMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STGpioGetMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[8];
+        int n = stream.Read(buf);
+        if (n < 8) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STGpioGetMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[8];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STGpioGetMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[8];
+        int n = stream.Read(buf);
+        if (n < 8) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STGpioGetMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[8];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STGpioSetMessage
+{
+    internal const int SizeOfStruct = 16;
+
+    internal ulong Mask { get; set; }
+    internal ulong Values { get; set; }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioSetMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioSetMessage();
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        offset += 8;
+        if (span.Length - offset < 8) return false;
+        result.Values = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        offset += 8;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STGpioSetMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Mask);
+        offset += 8;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Values);
+        offset += 8;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STGpioSetMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioSetMessage();
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
+        offset += 8;
+        if (span.Length - offset < 8) return false;
+        result.Values = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
+        offset += 8;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STGpioSetMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Mask);
+        offset += 8;
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Values);
+        offset += 8;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STGpioSetMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STGpioSetMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STGpioSetMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STGpioSetMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STGpioSetMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[16];
+        int n = stream.Read(buf);
+        if (n < 16) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STGpioSetMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[16];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STGpioSetMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[16];
+        int n = stream.Read(buf);
+        if (n < 16) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STGpioSetMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[16];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STGpioModeMessage
+{
+    internal const int SizeOfStruct = 2;
+
+    internal byte Gpio { get; set; }
+    internal STGpioMode Mode { get; set; }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioModeMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioModeMessage();
+        int offset = 0;
+        if (span.Length - offset < 1) return false;
+        result.Gpio = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Mode = (STGpioMode)span[offset];
+        offset += 1;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STGpioModeMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Gpio;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = (byte)value.Mode;
+        offset += 1;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STGpioModeMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STGpioModeMessage();
+        int offset = 0;
+        if (span.Length - offset < 1) return false;
+        result.Gpio = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Mode = (STGpioMode)span[offset];
+        offset += 1;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STGpioModeMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Gpio;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = (byte)value.Mode;
+        offset += 1;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STGpioModeMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STGpioModeMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STGpioModeMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STGpioModeMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STGpioModeMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[2];
+        int n = stream.Read(buf);
+        if (n < 2) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STGpioModeMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[2];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STGpioModeMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[2];
+        int n = stream.Read(buf);
+        if (n < 2) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STGpioModeMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[2];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STMacAddressMessage
+{
+    internal const int SizeOfStruct = 0;
+
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STMacAddressMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STMacAddressMessage();
+        int offset = 0;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STMacAddressMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STMacAddressMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STMacAddressMessage();
+        int offset = 0;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STMacAddressMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STMacAddressMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STMacAddressMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STMacAddressMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STMacAddressMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STMacAddressMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[0];
+        int n = stream.Read(buf);
+        if (n < 0) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STMacAddressMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[0];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STMacAddressMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[0];
+        int n = stream.Read(buf);
+        if (n < 0) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STMacAddressMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[0];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STEspIdfVersionResponseMessage
+{
+    internal const int SizeOfStruct = 67;
+
+    internal string Version { get; set; }
+    internal byte Major { get; set; }
+    internal byte Minor { get; set; }
+    internal byte Patch { get; set; }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STEspIdfVersionResponseMessage();
+        int offset = 0;
+        if (span.Length - offset < 64) return false;
+        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
+        offset += 64;
+        if (span.Length - offset < 1) return false;
+        result.Major = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Minor = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Patch = span[offset];
+        offset += 1;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 64) return false;
+        Buffers.EncodeUtf8(value.Version, span.Slice(offset, 64));
+        offset += 64;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Major;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Minor;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Patch;
+        offset += 1;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STEspIdfVersionResponseMessage();
+        int offset = 0;
+        if (span.Length - offset < 64) return false;
+        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
+        offset += 64;
+        if (span.Length - offset < 1) return false;
+        result.Major = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Minor = span[offset];
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        result.Patch = span[offset];
+        offset += 1;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 64) return false;
+        Buffers.EncodeUtf8(value.Version, span.Slice(offset, 64));
+        offset += 64;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Major;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Minor;
+        offset += 1;
+        if (span.Length - offset < 1) return false;
+        span[offset] = value.Patch;
+        offset += 1;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[67];
+        int n = stream.Read(buf);
+        if (n < 67) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[67];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STEspIdfVersionResponseMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[67];
+        int n = stream.Read(buf);
+        if (n < 67) { result = null; bytesRead = n; return false; }
+        return TryReadBECore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Stream stream, STEspIdfVersionResponseMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[67];
+        if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+partial class STRngResponseMessage
+{
+    internal const int SizeOfStruct = 4;
+
+    internal uint Value { get; set; }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STRngResponseMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STRngResponseMessage();
+        int offset = 0;
+        if (span.Length - offset < 4) return false;
+        result.Value = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset));
+        offset += 4;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteCore(Span<byte> span, STRngResponseMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 4) return false;
+        BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(offset), value.Value);
+        offset += 4;
+        bytesWritten = offset;
+        return true;
+    }
+
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STRngResponseMessage result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new STRngResponseMessage();
+        int offset = 0;
+        if (span.Length - offset < 4) return false;
+        result.Value = BinaryPrimitives.ReadUInt32BigEndian(span.Slice(offset));
+        offset += 4;
+        bytesRead = offset;
+        return true;
+    }
+
+    private static bool TryWriteBECore(Span<byte> span, STRngResponseMessage value, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        if (span.Length - offset < 4) return false;
+        BinaryPrimitives.WriteUInt32BigEndian(span.Slice(offset), value.Value);
+        offset += 4;
+        bytesWritten = offset;
+        return true;
+    }
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STRngResponseMessage result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Span<byte> destination, STRngResponseMessage value, out int bytesWritten)
+    {
+        return TryWriteCore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STRngResponseMessage result, out int bytesRead)
+    {
+        return TryReadBECore(span, out result, out bytesRead);
+    }
+
+    internal static bool TryWriteBE(Span<byte> destination, STRngResponseMessage value, out int bytesWritten)
+    {
+        return TryWriteBECore(destination, value, out bytesWritten);
+    }
+
+    internal static bool TryRead(Stream stream, out STRngResponseMessage result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[4];
+        int n = stream.Read(buf);
+        if (n < 4) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    internal static bool TryWrite(Stream stream, STRngResponseMessage value, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[4];
+        if (!TryWriteCore(buf, value, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+    internal static bool TryReadBE(Stream stream, out STRngResponseMessage result, out int bytesRead)
+    {
         Span<byte> buf = stackalloc byte[4];
         int n = stream.Read(buf);
         if (n < 4) { result = null; bytesRead = n; return false; }
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Stream stream, STRngMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Stream stream, STRngResponseMessage value, out int bytesWritten)
     {
         Span<byte> buf = stackalloc byte[4];
         if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
@@ -890,143 +912,105 @@ partial class STRngMessage
 
 }
 
-partial class STMacMessage
+partial class STGpioGetResponseMessage
 {
-    internal const int SizeOfStruct = 6;
+    internal const int SizeOfStruct = 8;
 
-    internal byte[] Address { get; set; }
+    internal ulong Values { get; set; }
 
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STMacMessage result, out int bytesRead)
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioGetResponseMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STMacMessage();
+        result = new STGpioGetResponseMessage();
         int offset = 0;
-        {
-            var _arr_Address = new byte[6];
-            for (int i = 0; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                _arr_Address[i] = span[offset];
-                offset += 1;
-            }
-            result.Address = _arr_Address;
-        }
+        if (span.Length - offset < 8) return false;
+        result.Values = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        offset += 8;
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteCore(Span<byte> span, STMacMessage value, out int bytesWritten)
+    private static bool TryWriteCore(Span<byte> span, STGpioGetResponseMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
-        {
-            int _count_Address = value.Address != null ? Math.Min(value.Address.Length, 6) : 0;
-            for (int i = 0; i < _count_Address; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = value.Address[i];
-                offset += 1;
-            }
-            for (int i = _count_Address; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = (byte)0;
-                offset += 1;
-            }
-        }
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), value.Values);
+        offset += 8;
         bytesWritten = offset;
         return true;
     }
 
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STMacMessage result, out int bytesRead)
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STGpioGetResponseMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STMacMessage();
+        result = new STGpioGetResponseMessage();
         int offset = 0;
-        {
-            var _arr_Address = new byte[6];
-            for (int i = 0; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                _arr_Address[i] = span[offset];
-                offset += 1;
-            }
-            result.Address = _arr_Address;
-        }
+        if (span.Length - offset < 8) return false;
+        result.Values = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
+        offset += 8;
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteBECore(Span<byte> span, STMacMessage value, out int bytesWritten)
+    private static bool TryWriteBECore(Span<byte> span, STGpioGetResponseMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
-        {
-            int _count_Address = value.Address != null ? Math.Min(value.Address.Length, 6) : 0;
-            for (int i = 0; i < _count_Address; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = value.Address[i];
-                offset += 1;
-            }
-            for (int i = _count_Address; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = (byte)0;
-                offset += 1;
-            }
-        }
+        if (span.Length - offset < 8) return false;
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), value.Values);
+        offset += 8;
         bytesWritten = offset;
         return true;
     }
 
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STMacMessage result, out int bytesRead)
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STGpioGetResponseMessage result, out int bytesRead)
     {
         return TryReadCore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Span<byte> destination, STMacMessage value, out int bytesWritten)
+    internal static bool TryWrite(Span<byte> destination, STGpioGetResponseMessage value, out int bytesWritten)
     {
         return TryWriteCore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STMacMessage result, out int bytesRead)
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STGpioGetResponseMessage result, out int bytesRead)
     {
         return TryReadBECore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Span<byte> destination, STMacMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Span<byte> destination, STGpioGetResponseMessage value, out int bytesWritten)
     {
         return TryWriteBECore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryRead(Stream stream, out STMacMessage result, out int bytesRead)
+    internal static bool TryRead(Stream stream, out STGpioGetResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[8];
         int n = stream.Read(buf);
-        if (n < 6) { result = null; bytesRead = n; return false; }
+        if (n < 8) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Stream stream, STMacMessage value, out int bytesWritten)
+    internal static bool TryWrite(Stream stream, STGpioGetResponseMessage value, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[8];
         if (!TryWriteCore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
     }
 
-    internal static bool TryReadBE(Stream stream, out STMacMessage result, out int bytesRead)
+    internal static bool TryReadBE(Stream stream, out STGpioGetResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[8];
         int n = stream.Read(buf);
-        if (n < 6) { result = null; bytesRead = n; return false; }
+        if (n < 8) { result = null; bytesRead = n; return false; }
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Stream stream, STMacMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Stream stream, STGpioGetResponseMessage value, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[8];
         if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -1034,92 +1018,143 @@ partial class STMacMessage
 
 }
 
-partial class STNopMessage
+partial class STMacAddressResponseMessage
 {
-    internal const int SizeOfStruct = 0;
+    internal const int SizeOfStruct = 6;
 
+    internal byte[] Address { get; set; }
 
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out STNopMessage result, out int bytesRead)
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out STMacAddressResponseMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STNopMessage();
+        result = new STMacAddressResponseMessage();
         int offset = 0;
+        {
+            var _arr_Address = new byte[6];
+            for (int i = 0; i < 6; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                _arr_Address[i] = span[offset];
+                offset += 1;
+            }
+            result.Address = _arr_Address;
+        }
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteCore(Span<byte> span, STNopMessage value, out int bytesWritten)
+    private static bool TryWriteCore(Span<byte> span, STMacAddressResponseMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
+        {
+            int _count_Address = value.Address != null ? Math.Min(value.Address.Length, 6) : 0;
+            for (int i = 0; i < _count_Address; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                span[offset] = value.Address[i];
+                offset += 1;
+            }
+            for (int i = _count_Address; i < 6; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                span[offset] = (byte)0;
+                offset += 1;
+            }
+        }
         bytesWritten = offset;
         return true;
     }
 
-    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STNopMessage result, out int bytesRead)
+    private static bool TryReadBECore(ReadOnlySpan<byte> span, out STMacAddressResponseMessage result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new STNopMessage();
+        result = new STMacAddressResponseMessage();
         int offset = 0;
+        {
+            var _arr_Address = new byte[6];
+            for (int i = 0; i < 6; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                _arr_Address[i] = span[offset];
+                offset += 1;
+            }
+            result.Address = _arr_Address;
+        }
         bytesRead = offset;
         return true;
     }
 
-    private static bool TryWriteBECore(Span<byte> span, STNopMessage value, out int bytesWritten)
+    private static bool TryWriteBECore(Span<byte> span, STMacAddressResponseMessage value, out int bytesWritten)
     {
         bytesWritten = 0;
         int offset = 0;
+        {
+            int _count_Address = value.Address != null ? Math.Min(value.Address.Length, 6) : 0;
+            for (int i = 0; i < _count_Address; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                span[offset] = value.Address[i];
+                offset += 1;
+            }
+            for (int i = _count_Address; i < 6; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                span[offset] = (byte)0;
+                offset += 1;
+            }
+        }
         bytesWritten = offset;
         return true;
     }
 
-    internal static bool TryRead(ReadOnlySpan<byte> span, out STNopMessage result, out int bytesRead)
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STMacAddressResponseMessage result, out int bytesRead)
     {
         return TryReadCore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Span<byte> destination, STNopMessage value, out int bytesWritten)
+    internal static bool TryWrite(Span<byte> destination, STMacAddressResponseMessage value, out int bytesWritten)
     {
         return TryWriteCore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STNopMessage result, out int bytesRead)
+    internal static bool TryReadBE(ReadOnlySpan<byte> span, out STMacAddressResponseMessage result, out int bytesRead)
     {
         return TryReadBECore(span, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Span<byte> destination, STNopMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Span<byte> destination, STMacAddressResponseMessage value, out int bytesWritten)
     {
         return TryWriteBECore(destination, value, out bytesWritten);
     }
 
-    internal static bool TryRead(Stream stream, out STNopMessage result, out int bytesRead)
+    internal static bool TryRead(Stream stream, out STMacAddressResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[0];
+        Span<byte> buf = stackalloc byte[6];
         int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
+        if (n < 6) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWrite(Stream stream, STNopMessage value, out int bytesWritten)
+    internal static bool TryWrite(Stream stream, STMacAddressResponseMessage value, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[0];
+        Span<byte> buf = stackalloc byte[6];
         if (!TryWriteCore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
     }
 
-    internal static bool TryReadBE(Stream stream, out STNopMessage result, out int bytesRead)
+    internal static bool TryReadBE(Stream stream, out STMacAddressResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[0];
+        Span<byte> buf = stackalloc byte[6];
         int n = stream.Read(buf);
-        if (n < 0) { result = null; bytesRead = n; return false; }
+        if (n < 6) { result = null; bytesRead = n; return false; }
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
-    internal static bool TryWriteBE(Stream stream, STNopMessage value, out int bytesWritten)
+    internal static bool TryWriteBE(Stream stream, STMacAddressResponseMessage value, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[0];
+        Span<byte> buf = stackalloc byte[6];
         if (!TryWriteBECore(buf, value, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
