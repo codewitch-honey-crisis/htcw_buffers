@@ -1,0 +1,4 @@
+SerialFrameDemo/.vs/*
+SerialFrameDemo/bin/*
+SerialFrameDemo/obj/*
+SerialFrameDemo/firmware/.vscode/settings.json
