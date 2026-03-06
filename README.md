@@ -38,6 +38,7 @@ python .\buffers_gen_c.py --buffers example.h
 ## C# code
 Options:
 - `--buffers` generate shared code
+- `--public` generate public types
 - `--namespace <namespace>` generate under the indicated namespace
 - `--out <dir>` override the output directory
 
