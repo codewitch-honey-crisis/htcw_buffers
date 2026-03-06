@@ -45,7 +45,7 @@ internal class Program
                         {
                             STEspIdfVersionMessage ver = new STEspIdfVersionMessage();
                             
-                            if(STEspIdfVersionMessage.TryWrite(buffer,ver, out var _))
+                            if(ver.TryWrite(buffer,out var _))
                             {
                                 session.Send((byte)STMessageCommand.CmdEspIdfVersion, buffer.AsSpan(0,STEspIdfVersionMessage.SizeOfStruct));
                             }
@@ -55,7 +55,7 @@ internal class Program
                         {
                             STRngMessage rng = new STRngMessage();
 
-                            if (STRngMessage.TryWrite(buffer, rng, out var _))
+                            if (rng.TryWrite(buffer, out var _))
                             {
                                 session.Send((byte)STMessageCommand.CmdRng, buffer.AsSpan(0,STRngMessage.SizeOfStruct));
                             }
@@ -78,7 +78,7 @@ internal class Program
                                     _gpioNum = b;
                                     var gpioGet = new STGpioGetMessage();
                                     gpioGet.Mask = unchecked((ulong)(1UL << b));
-                                    if (STGpioGetMessage.TryWrite(buffer, gpioGet, out var _))
+                                    if (gpioGet.TryWrite(buffer, out var _))
                                     {
                                         session.Send((byte)STMessageCommand.CmdGpioGet, buffer.AsSpan(0,STGpioGetMessage.SizeOfStruct));
                                     }
@@ -118,7 +118,7 @@ internal class Program
                                             {
                                                 gpioSet.Values = unchecked((ulong)(1UL << b));
                                             }
-                                            if (STGpioSetMessage.TryWrite(buffer, gpioSet, out var _))
+                                            if (gpioSet.TryWrite(buffer, out var _))
                                             {
                                                 session.Send((byte)STMessageCommand.CmdGpioSet, buffer.AsSpan(0,STGpioSetMessage.SizeOfStruct));
                                             }
@@ -129,7 +129,7 @@ internal class Program
                                             gpioMode.Gpio = b;
                                             Debug.WriteLine($"Gpio mode set for {b}");
                                             gpioMode.Mode = modeKind;
-                                            if (STGpioModeMessage.TryWrite(buffer, gpioMode, out var _))
+                                            if (gpioMode.TryWrite(buffer, out var _))
                                             {
                                                 session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0, STGpioModeMessage.SizeOfStruct));
                                             }
@@ -186,7 +186,7 @@ internal class Program
                                         var gpioMode = new STGpioModeMessage();
                                         gpioMode.Gpio = b;
                                         gpioMode.Mode = modeKind;
-                                        if (STGpioModeMessage.TryWrite(buffer, gpioMode, out var _))
+                                        if (gpioMode.TryWrite(buffer, out var _))
                                         {
                                             session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0,STGpioModeMessage.SizeOfStruct));
                                         }
@@ -203,7 +203,7 @@ internal class Program
                         {
                             STMacAddressMessage mac = new STMacAddressMessage();
 
-                            if (STMacAddressMessage.TryWrite(buffer, mac, out var _))
+                            if (mac.TryWrite(buffer, out var _))
                             {
                                 session.Send((byte)STMessageCommand.CmdMacAddress, buffer.AsSpan(0, STMacAddressMessage.SizeOfStruct));
                             }

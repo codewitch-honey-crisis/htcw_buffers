@@ -134,7 +134,14 @@ def to_dotnet_name(c_name: str) -> str:
     words = split_words(c_name)
     if not words:
         return c_name
-    return ''.join(dotnet_word(w) for w in words)
+    parts = []
+    for i, w in enumerate(words):
+        # Corner case: "is"/"to" as the first word should be "Is"/"To" not "IS"/"TO"
+        if i == 0 and w in ('is', 'to'):
+            parts.append(w.capitalize())
+        else:
+            parts.append(dotnet_word(w))
+    return ''.join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -616,25 +623,25 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
         if arr is not None and is_char_array(f):
             # UTF-8 string: encode and write exactly arr bytes, zero-padded, safe boundary truncation
             lines.append(f"{indent}if (span.Length - offset < {arr}) return false;")
-            lines.append(f"{indent}Buffers.EncodeUtf8(value.{cs_field}, span.Slice(offset, {arr}));")
+            lines.append(f"{indent}Buffers.EncodeUtf8({cs_field}, span.Slice(offset, {arr}));")
             lines.append(f"{indent}offset += {arr};")
 
         elif arr is not None and is_wchar_array(f):
             # UTF-16LE string
             byte_count = arr * 2
             lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-            lines.append(f"{indent}Buffers.EncodeUtf16Le(value.{cs_field}, span.Slice(offset, {byte_count}));")
+            lines.append(f"{indent}Buffers.EncodeUtf16Le({cs_field}, span.Slice(offset, {byte_count}));")
             lines.append(f"{indent}offset += {byte_count};")
 
         elif arr is not None and is_struct_array(f, all_struct_names):
             # IList<T>
             nested_cs = to_dotnet_name(wt)
             lines.append(f"{indent}{{")
-            lines.append(f"{inner}int _count_{cs_field} = value.{cs_field} != null ? Math.Min(value.{cs_field}.Count, {arr}) : 0;")
+            lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Count, {arr}) : 0;")
             lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
             lines.append(f"{inner}{{")
-            lines.append(f"{inner2}var _item_{cs_field} = value.{cs_field}[i];")
-            lines.append(f"{inner2}if (!{nested_cs}.TryWrite{suffix}(span.Slice(offset), _item_{cs_field}, out int _w_{cs_field})) return false;")
+            lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
+            lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}Core(span.Slice(offset), out int _w_{cs_field})) return false;")
             lines.append(f"{inner2}offset += _w_{cs_field};")
             lines.append(f"{inner}}}")
             # zero-fill any un-written slots
@@ -651,11 +658,11 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             cs_t = cs_wire_type(wt)
             is_enum = f['is_enum']
             lines.append(f"{indent}{{")
-            lines.append(f"{inner}int _count_{cs_field} = value.{cs_field} != null ? Math.Min(value.{cs_field}.Length, {arr}) : 0;")
+            lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Length, {arr}) : 0;")
             lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
             lines.append(f"{inner}{{")
             lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
-            val_expr = f"({cs_t})value.{cs_field}[i]" if is_enum else f"value.{cs_field}[i]"
+            val_expr = f"({cs_t}){cs_field}[i]" if is_enum else f"{cs_field}[i]"
             write_stmt = bp_write(wt, "span", "offset", val_expr)
             lines.append(f"{inner2}{write_stmt}")
             lines.append(f"{inner2}offset += {sz};")
@@ -674,13 +681,13 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             # single field
             if is_struct:
                 nested_cs = to_dotnet_name(wt)
-                lines.append(f"{indent}if (value.{cs_field} == null) return false;")
-                lines.append(f"{indent}if (!{nested_cs}.TryWrite{suffix}(span.Slice(offset), value.{cs_field}, out int _w_{cs_field})) return false;")
+                lines.append(f"{indent}if ({cs_field} == null) return false;")
+                lines.append(f"{indent}if (!{cs_field}.TryWrite{suffix}Core(span.Slice(offset), out int _w_{cs_field})) return false;")
                 lines.append(f"{indent}offset += _w_{cs_field};")
             else:
                 lines.append(f"{indent}if (span.Length - offset < {sz}) return false;")
                 cs_t = cs_wire_type(wt)
-                val_expr = f"({cs_t})value.{cs_field}" if f['is_enum'] else f"value.{cs_field}"
+                val_expr = f"({cs_t}){cs_field}" if f['is_enum'] else f"{cs_field}"
                 write_stmt = bp_write(wt, "span", "offset", val_expr)
                 lines.append(f"{indent}{write_stmt}")
                 lines.append(f"{indent}offset += {sz};")
@@ -719,7 +726,7 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
         lines.append("    }")
         lines.append("")
 
-        lines.append(f"    private static bool TryWrite{suffix}Core(Span<byte> span, {cs_name} value, out int bytesWritten)")
+        lines.append(f"    private bool TryWrite{suffix}Core(Span<byte> span, out int bytesWritten)")
         lines.append("    {")
         lines.extend(gen_span_write_core(cs_name, fields, structs, big_endian))
         lines.append("    }")
@@ -735,9 +742,9 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
         lines.append("    }")
         lines.append("")
 
-        lines.append(f"    {member_vis}static bool TryWrite{suffix}(Span<byte> destination, {cs_name} value, out int bytesWritten)")
+        lines.append(f"    {member_vis}bool TryWrite{suffix}(Span<byte> destination, out int bytesWritten)")
         lines.append("    {")
-        lines.append(f"        return TryWrite{suffix}Core(destination, value, out bytesWritten);")
+        lines.append(f"        return TryWrite{suffix}Core(destination, out bytesWritten);")
         lines.append("    }")
         lines.append("")
 
@@ -754,10 +761,10 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
         lines.append("    }")
         lines.append("")
 
-        lines.append(f"    {member_vis}static bool TryWrite{suffix}(Stream stream, {cs_name} value, out int bytesWritten)")
+        lines.append(f"    {member_vis}bool TryWrite{suffix}(Stream stream, out int bytesWritten)")
         lines.append("    {")
         lines.append(f"        Span<byte> buf = stackalloc byte[{wire_size}];")
-        lines.append(f"        if (!TryWrite{suffix}Core(buf, value, out bytesWritten)) return false;")
+        lines.append(f"        if (!TryWrite{suffix}Core(buf, out bytesWritten)) return false;")
         lines.append(f"        stream.Write(buf.Slice(0, bytesWritten));")
         lines.append(f"        return true;")
         lines.append("    }")
