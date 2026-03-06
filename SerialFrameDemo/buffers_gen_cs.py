@@ -86,6 +86,14 @@ WIRE_SCALAR_TYPES = set(WIRE_TYPE_SIZES.keys())
 # Types that don't need BinaryPrimitives (single byte)
 SINGLE_BYTE_TYPES = {'uint8_t', 'int8_t'}
 
+# Map from original C type to preferred C# interface type, where it differs
+# from the wire-derived type.  Only entries that need special handling.
+CS_NATIVE_TYPE_MAP = {
+    'bool':    'bool',
+    'char':    'char',
+    'wchar_t': 'char',
+}
+
 def enum_wire_type(min_val: int, max_val: int) -> str:
     if min_val >= 0:
         if max_val <= 0xFF:           return 'uint8_t'
@@ -392,6 +400,14 @@ def is_wchar_array(f: dict) -> bool:
     """wchar_t[N] -> string (UTF-16)"""
     return f['array_len'] is not None and f['type'] == 'wchar_t'
 
+def is_bool(f: dict) -> bool:
+    """C bool -> C# bool (wire: byte)"""
+    return f['type'] == 'bool'
+
+def is_native_char(f: dict) -> bool:
+    """Single char or wchar_t (non-array) -> C# char"""
+    return f['array_len'] is None and f['type'] in ('char', 'wchar_t')
+
 def is_struct_array(f: dict, all_struct_names: set) -> bool:
     return f['array_len'] is not None and f['wire_type'] in all_struct_names
 
@@ -400,8 +416,11 @@ def cs_field_type(f: dict, structs: dict) -> str:
     Return the C# type for a field as declared on the class:
       - char[N]       -> string
       - wchar_t[N]    -> string
+      - bool          -> bool
+      - single char   -> char
+      - single wchar_t-> char
       - struct T[N]   -> IList<CsName>
-      - scalar[N]     -> cstype[]
+      - scalar[N]     -> cstype[]  (bool[N] -> bool[])
       - enum (scalar) -> EnumCsName
       - struct T      -> CsName
       - scalar        -> cstype
@@ -409,6 +428,8 @@ def cs_field_type(f: dict, structs: dict) -> str:
     all_struct_names = set(structs.keys())
     wt = f['wire_type']
     arr = f['array_len']
+    c_type = f['type']
+    native = CS_NATIVE_TYPE_MAP.get(c_type)
 
     if arr is not None:
         if is_char_array(f) or is_wchar_array(f):
@@ -418,12 +439,16 @@ def cs_field_type(f: dict, structs: dict) -> str:
         # scalar or enum array
         if f['is_enum']:
             return f"{to_dotnet_name(f['enum_c_name'])}[]"
+        if native:
+            return f"{native}[]"
         return f"{cs_wire_type(wt)}[]"
     else:
         if wt in all_struct_names:
             return to_dotnet_name(wt)
         if f['is_enum']:
             return to_dotnet_name(f['enum_c_name'])
+        if native:
+            return native
         return cs_wire_type(wt)
 
 
@@ -563,7 +588,8 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
             cs_t = cs_wire_type(wt)
             is_enum = f['is_enum']
             enum_cs = to_dotnet_name(f['enum_c_name']) if is_enum else None
-            arr_type = enum_cs if is_enum else cs_t
+            native = CS_NATIVE_TYPE_MAP.get(f['type'])
+            arr_type = enum_cs if is_enum else (native if native else cs_t)
             lines.append(f"{indent}{{")
             lines.append(f"{inner}var _arr_{cs_field} = new {arr_type}[{arr}];")
             lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
@@ -572,6 +598,10 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
             read_expr = bp_read(wt, "span", "offset")
             if is_enum:
                 lines.append(f"{inner2}_arr_{cs_field}[i] = ({enum_cs}){read_expr};")
+            elif f['type'] == 'bool':
+                lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr} != 0;")
+            elif native:
+                lines.append(f"{inner2}_arr_{cs_field}[i] = ({native}){read_expr};")
             else:
                 lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr};")
             lines.append(f"{inner2}offset += {sz};")
@@ -590,9 +620,14 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{indent}if (span.Length - offset < {sz}) return false;")
                 read_expr = bp_read(wt, "span", "offset")
                 cs_t = cs_wire_type(wt)
+                native = CS_NATIVE_TYPE_MAP.get(f['type'])
                 if f['is_enum']:
                     enum_cs = to_dotnet_name(f['enum_c_name'])
                     lines.append(f"{indent}result.{cs_field} = ({enum_cs}){read_expr};")
+                elif f['type'] == 'bool':
+                    lines.append(f"{indent}result.{cs_field} = {read_expr} != 0;")
+                elif native:
+                    lines.append(f"{indent}result.{cs_field} = ({native}){read_expr};")
                 else:
                     lines.append(f"{indent}result.{cs_field} = {read_expr};")
                 lines.append(f"{indent}offset += {sz};")
@@ -662,7 +697,14 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
             lines.append(f"{inner}{{")
             lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
-            val_expr = f"({cs_t}){cs_field}[i]" if is_enum else f"{cs_field}[i]"
+            if is_enum:
+                val_expr = f"({cs_t}){cs_field}[i]"
+            elif f['type'] == 'bool':
+                val_expr = f"(byte)({cs_field}[i] ? 1 : 0)"
+            elif f['type'] in CS_NATIVE_TYPE_MAP:
+                val_expr = f"({cs_t}){cs_field}[i]"
+            else:
+                val_expr = f"{cs_field}[i]"
             write_stmt = bp_write(wt, "span", "offset", val_expr)
             lines.append(f"{inner2}{write_stmt}")
             lines.append(f"{inner2}offset += {sz};")
@@ -687,7 +729,14 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             else:
                 lines.append(f"{indent}if (span.Length - offset < {sz}) return false;")
                 cs_t = cs_wire_type(wt)
-                val_expr = f"({cs_t}){cs_field}" if f['is_enum'] else f"{cs_field}"
+                if f['is_enum']:
+                    val_expr = f"({cs_t}){cs_field}"
+                elif f['type'] == 'bool':
+                    val_expr = f"(byte)({cs_field} ? 1 : 0)"
+                elif f['type'] in CS_NATIVE_TYPE_MAP:
+                    val_expr = f"({cs_t}){cs_field}"
+                else:
+                    val_expr = f"{cs_field}"
                 write_stmt = bp_write(wt, "span", "offset", val_expr)
                 lines.append(f"{indent}{write_stmt}")
                 lines.append(f"{indent}offset += {sz};")
