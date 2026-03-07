@@ -676,7 +676,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
             lines.append(f"{inner}{{")
             lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
-            lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}Core(span.Slice(offset), out int _w_{cs_field})) return false;")
+            lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
             lines.append(f"{inner2}offset += _w_{cs_field};")
             lines.append(f"{inner}}}")
             # zero-fill any un-written slots
@@ -724,7 +724,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             if is_struct:
                 nested_cs = to_dotnet_name(wt)
                 lines.append(f"{indent}if ({cs_field} == null) return false;")
-                lines.append(f"{indent}if (!{cs_field}.TryWrite{suffix}Core(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{indent}if (!{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
                 lines.append(f"{indent}offset += _w_{cs_field};")
             else:
                 lines.append(f"{indent}if (span.Length - offset < {sz}) return false;")
