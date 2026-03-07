@@ -3,16 +3,22 @@
 buffers_gen_c.py - Parse wire structs from a C header and generate
                    read/write functions for each struct.
 
-Usage: python buffers_gen_c.py <header.h>
+Usage: python buffers_gen_c.py [--prefix <pfx>] [--buffers] [--out <dir>] <header.h>
+
+Options:
+  --prefix <pfx>   Prepend <pfx> to every generated function name and
+                   per-struct #define (not to the MAX_SIZE define).
+  --buffers        Also emit buffers.h / buffers.c support files.
+  --out <dir>      Directory for generated files (default: same as input).
 
 Outputs:
   <stem>_buffers.h   - declarations for all read/write functions
   <stem>_buffers.c   - implementations
 
 Function naming:
-  - Prefix from input filename stem (e.g. interface.h -> interface_)
   - Typedef names ending in _t have _t stripped
-  - e.g. espmon_color_t -> interface_read_espmon_color / interface_write_espmon_color
+  - struct name precedes _read / _write
+  - e.g. example_data_message_t -> [prefix]example_data_message_read / [prefix]example_data_message_write
 """
 
 import os
@@ -116,18 +122,18 @@ def header_stem_to_define_prefix(header_path: str) -> str:
     return ident
 
 
-def struct_size_define_name(header_path: str, struct_name: str) -> str:
+def struct_size_define_name(struct_name: str, user_prefix: str = "") -> str:
     """Return the #define name for a struct's wire size.
 
-    e.g. interface.h + nop_message_t  -> INTERFACE_NOP_MESSAGE_SIZE
+    e.g. nop_message_t  -> NOP_MESSAGE_SIZE
+         with user_prefix="EX_" -> EX_NOP_MESSAGE_SIZE
     """
-    file_prefix = header_stem_to_define_prefix(header_path)
-    # Strip trailing _t, replace invalid ident chars with _, uppercase
     name = struct_name
     if name.endswith('_t'):
         name = name[:-2]
     name = re.sub(r'[^A-Za-z0-9]', '_', name).upper()
-    return f"{file_prefix}_{name}_SIZE"
+    up = user_prefix.upper()
+    return f"{up}{name}_SIZE"
 
 # ---------------------------------------------------------------------------
 # Enum parsing
@@ -135,11 +141,11 @@ def struct_size_define_name(header_path: str, struct_name: str) -> str:
 
 ENUM_TYPEDEF_RE = re.compile(
     r'\btypedef\s+enum\s*(?:[A-Za-z_][A-Za-z0-9_]*)?\s*'
-    r'\{(?P<body>[^{}]*)\}\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*;',
+    r'\{(?P<body>[^{}]*)\}\s*(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*;',
     re.DOTALL,
 )
 ENUM_RE = re.compile(
-    r'\benum\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?P<body>[^{}]*)\}\s*;',
+    r'\benum\s+(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?P<body>[^{}]*)\}\s*;',
     re.DOTALL,
 )
 _INT_LITERAL_RE = re.compile(r'^-?\s*(?:0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*|0)$')
@@ -149,11 +155,11 @@ def parse_enums(text: str) -> dict:
     enums = {}
     found = []
     for m in ENUM_TYPEDEF_RE.finditer(text):
-        found.append((m.group('name'), m.group('body')))
+        found.append((m.group('n'), m.group('body')))
     typedef_names = {n for n, _ in found}
     for m in ENUM_RE.finditer(text):
-        if m.group('name') not in typedef_names:
-            found.append((m.group('name'), m.group('body')))
+        if m.group('n') not in typedef_names:
+            found.append((m.group('n'), m.group('body')))
     for name, body in found:
         if name in enums:
             error(f"Duplicate enum name: '{name}'")
@@ -184,7 +190,7 @@ FIELD_RE = re.compile(
     r'^\s*'
     r'(?P<type>[A-Za-z_][A-Za-z0-9_ ]*?)'
     r'\s+'
-    r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'
+    r'(?P<n>[A-Za-z_][A-Za-z0-9_]*)'
     r'(?:\s*\[\s*(?P<len>[^\]]+)\s*\])?'
     r'\s*;',
     re.MULTILINE,
@@ -211,7 +217,7 @@ def parse_field(raw, struct_name, all_struct_names, known_enums):
     if not m:
         error(f"Struct '{struct_name}': cannot parse field: '{raw}'")
     type_str = ' '.join(m.group('type').split())
-    name = m.group('name')
+    name = m.group('n')
     len_str = m.group('len')
     array_len = None
     if len_str is not None:
@@ -245,11 +251,11 @@ def parse_struct_body(body, struct_name, all_struct_names, known_enums):
 # ---------------------------------------------------------------------------
 
 STRUCT_RE = re.compile(
-    r'\bstruct\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?P<body>[^{}]*)\}\s*;',
+    r'\bstruct\s+(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?P<body>[^{}]*)\}\s*;',
     re.DOTALL,
 )
 TYPEDEF_RE = re.compile(
-    r'\btypedef\s+struct\s*(?:[A-Za-z_][A-Za-z0-9_]*)?\s*\{(?P<body>[^{}]*)\}\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*;',
+    r'\btypedef\s+struct\s*(?:[A-Za-z_][A-Za-z0-9_]*)?\s*\{(?P<body>[^{}]*)\}\s*(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*;',
     re.DOTALL,
 )
 
@@ -262,11 +268,11 @@ def parse_header(text: str) -> dict:
 
     found = []
     for m in TYPEDEF_RE.finditer(text):
-        found.append((m.start(), m.group('name'), m.group('body')))
+        found.append((m.start(), m.group('n'), m.group('body')))
     typedef_spans = [(m.start(), m.end()) for m in TYPEDEF_RE.finditer(text)]
     for m in STRUCT_RE.finditer(text):
         if not any(ts <= m.start() and m.end() <= te for ts, te in typedef_spans):
-            found.append((m.start(), m.group('name'), m.group('body')))
+            found.append((m.start(), m.group('n'), m.group('body')))
     found.sort(key=lambda x: x[0])
 
     all_struct_names = {name for _, name, _ in found}
@@ -323,16 +329,13 @@ def compute_max_wire_size(structs: dict) -> int:
 # Code generation
 # ---------------------------------------------------------------------------
 
-def file_prefix(header_path: str) -> str:
-    return os.path.splitext(os.path.basename(header_path))[0]
+
+def read_fn_name(user_prefix, struct_name):
+    return f"{user_prefix}{type_fn_suffix(struct_name)}_read"
 
 
-def read_fn_name(prefix, struct_name):
-    return f"{prefix}_read_{type_fn_suffix(struct_name)}"
-
-
-def write_fn_name(prefix, struct_name):
-    return f"{prefix}_write_{type_fn_suffix(struct_name)}"
+def write_fn_name(user_prefix, struct_name):
+    return f"{user_prefix}{type_fn_suffix(struct_name)}_write"
 
 
 def gen_read_call(prefix, field, accessor, all_struct_names, indent="    "):
@@ -459,7 +462,7 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names):
     return "\n".join(lines)
 
 
-def generate_h(header_path, prefix, structs):
+def generate_h(header_path, user_prefix, structs):
     stem = os.path.splitext(os.path.basename(header_path))[0]
     guard = f"{stem.upper()}_BUFFERS_H"
     define_prefix = header_stem_to_define_prefix(header_path)
@@ -474,7 +477,7 @@ def generate_h(header_path, prefix, structs):
     ]
     for struct_name in structs:
         size = struct_wire_size(struct_name, structs)
-        define = struct_size_define_name(header_path, struct_name)
+        define = struct_size_define_name(struct_name, user_prefix)
         lines.append(f"#define {define} ({size})")
     lines += [
         "",
@@ -484,14 +487,14 @@ def generate_h(header_path, prefix, structs):
         "",
     ]
     for struct_name in structs:
-        lines.append(f"int {read_fn_name(prefix, struct_name)}({struct_name}* s, buffers_read_callback_t on_read, void* on_read_state);")
-        lines.append(f"int {write_fn_name(prefix, struct_name)}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state);")
+        lines.append(f"int {read_fn_name(user_prefix, struct_name)}({struct_name}* s, buffers_read_callback_t on_read, void* on_read_state);")
+        lines.append(f"int {write_fn_name(user_prefix, struct_name)}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state);")
         lines.append("")
     lines += ["#ifdef __cplusplus", "}", "#endif", f"#endif /* {guard} */", ""]
     return "\n".join(lines)
 
 
-def generate_c(header_path, prefix, structs):
+def generate_c(header_path, user_prefix, structs):
     stem = os.path.splitext(os.path.basename(header_path))[0]
     all_struct_names = set(structs.keys())
     lines = [
@@ -512,9 +515,9 @@ def generate_c(header_path, prefix, structs):
         lines.append("")
 
     for struct_name, info in structs.items():
-        lines.append(gen_read_fn(prefix, struct_name, info['fields'], all_struct_names))
+        lines.append(gen_read_fn(user_prefix, struct_name, info['fields'], all_struct_names))
         lines.append("")
-        lines.append(gen_write_fn(prefix, struct_name, info['fields'], all_struct_names))
+        lines.append(gen_write_fn(user_prefix, struct_name, info['fields'], all_struct_names))
         lines.append("")
     return "\n".join(lines)
 
@@ -941,6 +944,7 @@ def main():
     args = sys.argv[1:]
     gen_buffers = False
     out_dir = ""
+    user_prefix = ""
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--buffers':
@@ -949,11 +953,15 @@ def main():
             if not args:
                 error("--out requires an argument")
             out_dir = args.pop(0)
+        elif opt == '--prefix':
+            if not args:
+                error("--prefix requires an argument")
+            user_prefix = args.pop(0)
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--buffers] [--out <dir>] <header.h>", file=sys.stderr)
+        print(f"Usage: {sys.argv[0]} [--buffers] [--out <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
         sys.exit(1)
 
     path = args[0]
@@ -967,7 +975,6 @@ def main():
     if not structs:
         error("No structs found in header")
 
-    prefix = file_prefix(path)
     stem = os.path.splitext(os.path.basename(path))[0]
 
     if len(out_dir) == 0:
@@ -977,9 +984,9 @@ def main():
     c_path = os.path.join(out_dir, f"{stem}_buffers.c")
 
     with open(h_path, 'w') as f:
-        f.write(generate_h(path, prefix, structs))
+        f.write(generate_h(path, user_prefix, structs))
     with open(c_path, 'w') as f:
-        f.write(generate_c(path, prefix, structs))
+        f.write(generate_c(path, user_prefix, structs))
 
     print(f"Written: {h_path}")
     print(f"Written: {c_path}")

@@ -45,58 +45,32 @@ internal static class Buffers
 
     /// <summary>
     /// Encode a string as UTF-8 into a fixed-length span, zero-padded.
-    /// Truncates on a valid UTF-8 code-point boundary so no broken sequences
-    /// are written. The destination is always fully written (zero-padded).
+    /// Uses Encoder.Convert to guarantee truncation on a valid code-point
+    /// boundary — no partial sequences are ever written.
     /// </summary>
     internal static void EncodeUtf8(string value, Span<byte> dest)
     {
         dest.Clear();
         if (string.IsNullOrEmpty(value)) return;
-        // Encode into a temporary buffer then find the safe truncation point
-        byte[] encoded = Encoding.UTF8.GetBytes(value);
-        int copyLen = Math.Min(encoded.Length, dest.Length);
-        // Walk back from copyLen to find a valid UTF-8 boundary
-        // A continuation byte has the form 10xxxxxx (0x80-0xBF).
-        // A leading byte of a multi-byte sequence starts with 11xxxxxx.
-        while (copyLen > 0 && (encoded[copyLen - 1] & 0xC0) == 0x80)
-            copyLen--; // back up past continuation bytes
-        // If we're now pointing at a leading byte, check it's complete
-        if (copyLen > 0)
-        {
-            byte lead = encoded[copyLen - 1];
-            int seqLen = lead < 0x80 ? 1
-                       : lead >= 0xF0 ? 4
-                       : lead >= 0xE0 ? 3
-                       : 2;
-            // Count how many bytes of that sequence we actually have
-            int have = 1;
-            int scan = copyLen - 2;
-            while (scan >= 0 && (encoded[scan] & 0xC0) == 0x80 && have < seqLen)
-            { have++; scan--; }
-            if (have < seqLen) copyLen--; // incomplete sequence: drop it
-        }
-        encoded.AsSpan(0, copyLen).CopyTo(dest);
+        var encoder = Encoding.UTF8.GetEncoder();
+        var chars = value.AsSpan();
+        encoder.Convert(chars, dest, flush: true,
+            out int charsUsed, out int bytesUsed, out bool completed);
     }
 
     /// <summary>
     /// Encode a string as UTF-16LE into a fixed-length span, zero-padded.
-    /// Truncates on a valid UTF-16 code-unit boundary (never splits a
-    /// surrogate pair). The destination is always fully written.
+    /// Uses Encoder.Convert to guarantee truncation on a valid code-unit
+    /// boundary — surrogate pairs are never split.
     /// </summary>
     internal static void EncodeUtf16Le(string value, Span<byte> dest)
     {
         dest.Clear();
         if (string.IsNullOrEmpty(value)) return;
-        byte[] encoded = Encoding.Unicode.GetBytes(value); // UTF-16LE
-        int maxChars = dest.Length / 2;
-        int copyChars = Math.Min(encoded.Length / 2, maxChars);
-        // If the last char is a high surrogate, drop it
-        if (copyChars > 0)
-        {
-            char last = (char)(encoded[(copyChars - 1) * 2] | (encoded[(copyChars - 1) * 2 + 1] << 8));
-            if (char.IsHighSurrogate(last)) copyChars--;
-        }
-        encoded.AsSpan(0, copyChars * 2).CopyTo(dest);
+        var encoder = Encoding.Unicode.GetEncoder();
+        var chars = value.AsSpan();
+        encoder.Convert(chars, dest, flush: true,
+            out int charsUsed, out int bytesUsed, out bool completed);
     }
 }
 #nullable restore

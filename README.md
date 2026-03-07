@@ -30,7 +30,7 @@ Flatbuffers has complicated build requirements and doesn't lend itself to buildi
 Options:
 - `--buffers` generate shared code
 - `--out <dir>` override the output directory
-
+- `--prefix <prefix>` use the given prefix on generated method and define code.
 ```
 python .\buffers_gen_c.py --buffers example.h
 ```
@@ -159,11 +159,11 @@ typedef union {
 
 This will generate `example_buffers.h`/`.c` which will give you an API you can use to serialize and deserialize.
 
-For example, to serialize and deserialize `example_data_message_t` from above the following API members are provided. Note that the duplicated "example" is due to the header having the same name as the struct prefixes therein:
+For example, to serialize and deserialize `example_data_message_t` from above the following API members are provided.
 ```c
 #define EXAMPLE_EXAMPLE_DATA_MESSAGE_SIZE (32)
-int example_read_example_data_message(example_data_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
-int example_write_example_data_message(const example_data_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
+int example_data_message_read(example_data_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
+int example_data_message_write(const example_data_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
 ```
 
 To read and write, you need to provide callbacks that support a streaming cursor. This is simple enough, for example over an array/buffer using the following code:
@@ -201,8 +201,8 @@ You can then deserialize like this:
 uint8_t buffer[EXAMPLE_MAX_SIZE];
 // at some point populate the above buffer with data... 
 example_data_message_t msg;
-buffer_read_cursor_t read_cur = {(const uint8_t*)buffer, EXAMPLE_EXAMPLE_DATA_MESSAGE_SIZE};
-if(-1<interface_read_example_data_message(&msg,on_read_buffer,&read_cur)) {
+buffer_read_cursor_t read_cur = {(const uint8_t*)buffer, EXAMPLE_DATA_MESSAGE_SIZE};
+if(-1<example_data_message_read(&msg,on_read_buffer,&read_cur)) {
     // msg is filled
 }
 ```
@@ -211,8 +211,8 @@ And you can serialize like this:
 uint8_t buffer[EXAMPLE_MAX_SIZE];
 example_data_message_t msg;
 // at some point populate the above msg with data... 
-buffer_write_cursor_t write_cur = {(uint8_t*)buffer, EXAMPLE_EXAMPLE_DATA_MESSAGE_SIZE};
-if(-1<interface_write_example_data_message(&msg,on_write_buffer,&write_cur)) {
+buffer_write_cursor_t write_cur = {(uint8_t*)buffer, EXAMPLE_DATA_MESSAGE_SIZE};
+if(-1<example_data_message_write(&msg,on_write_buffer,&write_cur)) {
     // The first 32 bytes of buffer is filled with the message
 }
 ```

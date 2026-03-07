@@ -195,7 +195,7 @@ _INT_LITERAL_RE = re.compile(r'^-?\s*(?:0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*|0)
 def parse_enums(text: str) -> dict:
     """
     Returns dict: c_name -> {wire_type, members: [(cs_member_name, int_value)]}
-    Bug fix vs original: use group 'n' not group 'name'.
+    Bug fix vs original: use group 'n'
     """
     enums = {}
     found = []  # list of (c_name, body)
