@@ -195,7 +195,7 @@ _INT_LITERAL_RE = re.compile(r'^-?\s*(?:0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*|0)
 def parse_enums(text: str) -> dict:
     """
     Returns dict: c_name -> {wire_type, members: [(cs_member_name, int_value)]}
-    Bug fix vs original: use group 'n' not group 'name'.
+    Bug fix vs original: use group 'n'
     """
     enums = {}
     found = []  # list of (c_name, body)
@@ -566,7 +566,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
             # UTF-16LE string: read arr*2 bytes, decode
             byte_count = arr * 2
             lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-            lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf16Le(span.Slice(offset, {byte_count}));")
+            lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf16LE(span.Slice(offset, {byte_count}));")
             lines.append(f"{indent}offset += {byte_count};")
 
         elif arr is not None and is_struct_array(f, all_struct_names):
@@ -665,7 +665,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             # UTF-16LE string
             byte_count = arr * 2
             lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-            lines.append(f"{indent}Buffers.EncodeUtf16Le({cs_field}, span.Slice(offset, {byte_count}));")
+            lines.append(f"{indent}Buffers.EncodeUtf16LE({cs_field}, span.Slice(offset, {byte_count}));")
             lines.append(f"{indent}offset += {byte_count};")
 
         elif arr is not None and is_struct_array(f, all_struct_names):
@@ -936,7 +936,7 @@ internal static class Buffers
     /// Decode a fixed-length UTF-16LE byte field into a string.
     /// Strips everything at and after the first null char (0x0000).
     /// </summary>
-    internal static string DecodeUtf16Le(ReadOnlySpan<byte> span)
+    internal static string DecodeUtf16LE(ReadOnlySpan<byte> span)
     {
         // Find first null char (two zero bytes aligned on even boundary)
         int len = span.Length & ~1; // round down to even
@@ -967,7 +967,7 @@ internal static class Buffers
     /// Uses Encoder.Convert to guarantee truncation on a valid code-unit
     /// boundary — surrogate pairs are never split.
     /// </summary>
-    internal static void EncodeUtf16Le(string value, Span<byte> dest)
+    internal static void EncodeUtf16LE(string value, Span<byte> dest)
     {
         dest.Clear();
         if (string.IsNullOrEmpty(value)) return;
