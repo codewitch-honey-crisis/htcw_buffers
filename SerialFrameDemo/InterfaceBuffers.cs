@@ -35,7 +35,7 @@ enum STGpioMode : byte
 
 struct InterfaceMaxSize
 {
-    internal const int Value = 67;
+    internal const int Value = 68;
 }
 
 partial class STEspIdfVersionMessage
@@ -663,7 +663,7 @@ partial class STMacAddressMessage
 
 partial class STEspIdfVersionResponseMessage
 {
-    internal const int SizeOfStruct = 67;
+    internal const int SizeOfStruct = 68;
 
     internal string Version { get; set; }
     internal byte Major { get; set; }
@@ -675,9 +675,14 @@ partial class STEspIdfVersionResponseMessage
         bytesRead = 0;
         result = new STEspIdfVersionResponseMessage();
         int offset = 0;
-        if (span.Length - offset < 64) return false;
-        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
-        offset += 64;
+        if (span.Length - offset < 1) return false;
+        {
+            int _len_Version = (int)(span[offset]);
+            offset += 1;
+            if (_len_Version > 64 || span.Length - offset < _len_Version) return false;
+            result.Version = Encoding.UTF8.GetString(span.Slice(offset, _len_Version));
+            offset += _len_Version;
+        }
         if (span.Length - offset < 1) return false;
         result.Major = span[offset];
         offset += 1;
@@ -695,9 +700,18 @@ partial class STEspIdfVersionResponseMessage
     {
         bytesWritten = 0;
         int offset = 0;
-        if (span.Length - offset < 64) return false;
-        Buffers.EncodeUtf8(Version, span.Slice(offset, 64));
-        offset += 64;
+        {
+            int _byteLen_Version = string.IsNullOrEmpty(Version) ? 0 : Encoding.UTF8.GetByteCount(Version);
+            if (_byteLen_Version > 64) _byteLen_Version = 64;
+            if (span.Length - offset < 1 + _byteLen_Version) return false;
+            span[offset] = (byte)_byteLen_Version;
+            offset += 1;
+            if (_byteLen_Version > 0)
+            {
+                Encoding.UTF8.GetBytes(Version.AsSpan(), span.Slice(offset, _byteLen_Version));
+                offset += _byteLen_Version;
+            }
+        }
         if (span.Length - offset < 1) return false;
         span[offset] = Major;
         offset += 1;
@@ -716,9 +730,14 @@ partial class STEspIdfVersionResponseMessage
         bytesRead = 0;
         result = new STEspIdfVersionResponseMessage();
         int offset = 0;
-        if (span.Length - offset < 64) return false;
-        result.Version = Buffers.DecodeUtf8(span.Slice(offset, 64));
-        offset += 64;
+        if (span.Length - offset < 1) return false;
+        {
+            int _len_Version = (int)(span[offset]);
+            offset += 1;
+            if (_len_Version > 64 || span.Length - offset < _len_Version) return false;
+            result.Version = Encoding.UTF8.GetString(span.Slice(offset, _len_Version));
+            offset += _len_Version;
+        }
         if (span.Length - offset < 1) return false;
         result.Major = span[offset];
         offset += 1;
@@ -736,9 +755,18 @@ partial class STEspIdfVersionResponseMessage
     {
         bytesWritten = 0;
         int offset = 0;
-        if (span.Length - offset < 64) return false;
-        Buffers.EncodeUtf8(Version, span.Slice(offset, 64));
-        offset += 64;
+        {
+            int _byteLen_Version = string.IsNullOrEmpty(Version) ? 0 : Encoding.UTF8.GetByteCount(Version);
+            if (_byteLen_Version > 64) _byteLen_Version = 64;
+            if (span.Length - offset < 1 + _byteLen_Version) return false;
+            span[offset] = (byte)_byteLen_Version;
+            offset += 1;
+            if (_byteLen_Version > 0)
+            {
+                Encoding.UTF8.GetBytes(Version.AsSpan(), span.Slice(offset, _byteLen_Version));
+                offset += _byteLen_Version;
+            }
+        }
         if (span.Length - offset < 1) return false;
         span[offset] = Major;
         offset += 1;
@@ -774,15 +802,15 @@ partial class STEspIdfVersionResponseMessage
 
     internal static bool TryRead(Stream stream, out STEspIdfVersionResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[67];
+        Span<byte> buf = stackalloc byte[68];
         int n = stream.Read(buf);
-        if (n < 67) { result = null; bytesRead = n; return false; }
+        if (n < 68) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
     internal bool TryWrite(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[67];
+        Span<byte> buf = stackalloc byte[68];
         if (!TryWriteCore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -790,15 +818,15 @@ partial class STEspIdfVersionResponseMessage
 
     internal static bool TryReadBE(Stream stream, out STEspIdfVersionResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[67];
+        Span<byte> buf = stackalloc byte[68];
         int n = stream.Read(buf);
-        if (n < 67) { result = null; bytesRead = n; return false; }
+        if (n < 68) { result = null; bytesRead = n; return false; }
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
     internal bool TryWriteBE(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[67];
+        Span<byte> buf = stackalloc byte[68];
         if (!TryWriteBECore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -1020,7 +1048,7 @@ partial class STGpioGetResponseMessage
 
 partial class STMacAddressResponseMessage
 {
-    internal const int SizeOfStruct = 6;
+    internal const int SizeOfStruct = 7;
 
     internal byte[] Address { get; set; }
 
@@ -1029,9 +1057,13 @@ partial class STMacAddressResponseMessage
         bytesRead = 0;
         result = new STMacAddressResponseMessage();
         int offset = 0;
+        if (span.Length - offset < 1) return false;
         {
-            var _arr_Address = new byte[6];
-            for (int i = 0; i < 6; i++)
+            int _len_Address = (int)(span[offset]);
+            offset += 1;
+            if (_len_Address > 6) return false;
+            var _arr_Address = new byte[_len_Address];
+            for (int i = 0; i < _len_Address; i++)
             {
                 if (span.Length - offset < 1) return false;
                 _arr_Address[i] = span[offset];
@@ -1049,16 +1081,13 @@ partial class STMacAddressResponseMessage
         int offset = 0;
         {
             int _count_Address = Address != null ? Math.Min(Address.Length, 6) : 0;
+            if (span.Length - offset < 1) return false;
+            span[offset] = (byte)_count_Address;
+            offset += 1;
             for (int i = 0; i < _count_Address; i++)
             {
                 if (span.Length - offset < 1) return false;
                 span[offset] = Address[i];
-                offset += 1;
-            }
-            for (int i = _count_Address; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = (byte)0;
                 offset += 1;
             }
         }
@@ -1071,9 +1100,13 @@ partial class STMacAddressResponseMessage
         bytesRead = 0;
         result = new STMacAddressResponseMessage();
         int offset = 0;
+        if (span.Length - offset < 1) return false;
         {
-            var _arr_Address = new byte[6];
-            for (int i = 0; i < 6; i++)
+            int _len_Address = (int)(span[offset]);
+            offset += 1;
+            if (_len_Address > 6) return false;
+            var _arr_Address = new byte[_len_Address];
+            for (int i = 0; i < _len_Address; i++)
             {
                 if (span.Length - offset < 1) return false;
                 _arr_Address[i] = span[offset];
@@ -1091,16 +1124,13 @@ partial class STMacAddressResponseMessage
         int offset = 0;
         {
             int _count_Address = Address != null ? Math.Min(Address.Length, 6) : 0;
+            if (span.Length - offset < 1) return false;
+            span[offset] = (byte)_count_Address;
+            offset += 1;
             for (int i = 0; i < _count_Address; i++)
             {
                 if (span.Length - offset < 1) return false;
                 span[offset] = Address[i];
-                offset += 1;
-            }
-            for (int i = _count_Address; i < 6; i++)
-            {
-                if (span.Length - offset < 1) return false;
-                span[offset] = (byte)0;
                 offset += 1;
             }
         }
@@ -1130,15 +1160,15 @@ partial class STMacAddressResponseMessage
 
     internal static bool TryRead(Stream stream, out STMacAddressResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[7];
         int n = stream.Read(buf);
-        if (n < 6) { result = null; bytesRead = n; return false; }
+        if (n < 7) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
     internal bool TryWrite(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[7];
         if (!TryWriteCore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -1146,15 +1176,15 @@ partial class STMacAddressResponseMessage
 
     internal static bool TryReadBE(Stream stream, out STMacAddressResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[7];
         int n = stream.Read(buf);
-        if (n < 6) { result = null; bytesRead = n; return false; }
+        if (n < 7) { result = null; bytesRead = n; return false; }
         return TryReadBECore(buf, out result, out bytesRead);
     }
 
     internal bool TryWriteBE(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[6];
+        Span<byte> buf = stackalloc byte[7];
         if (!TryWriteBECore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;

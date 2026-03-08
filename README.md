@@ -14,6 +14,8 @@ You'll need python installed to run the scripts.
 
 Any shared code can be produced by the scripts so you don't need to reference any runtimes.
 
+By default strings and arrays are prefixed with a length, and then only that number of elements are sent. If `--fixed` is indicated, no length is indicated, and the total number of elements in the array or string are always sent.
+
 ### Why not protobuf?
 
 Protobuf is kind of heavy for little devices, and even with nanopb the runtime has a significant footprint.
@@ -29,6 +31,7 @@ Flatbuffers has complicated build requirements and doesn't lend itself to buildi
 ## Generating C code
 Options:
 - `--buffers` generate shared code
+- `--fixed` generate fixed size serializatio/deserialization code
 - `--out <dir>` override the output directory
 - `--prefix <prefix>` use the given prefix on generated method and define code.
 ```
@@ -38,6 +41,7 @@ python .\buffers_gen_c.py --buffers example.h
 ## C# code
 Options:
 - `--buffers` generate shared code
+- `--fixed` generate fixed size serializatio/deserialization code
 - `--public` generate public types
 - `--namespace <namespace>` generate under the indicated namespace
 - `--out <dir>` override the output directory

@@ -6,6 +6,9 @@ buffers_gen_cs.py - Parse wire structs from a C header and generate
 Usage: python buffers_gen_cs.py [options] <header.h>
 
 Options:
+  --fixed            Use fixed-size serialization for arrays and strings
+                    (transmit entire declared size). Without this flag,
+                    arrays/strings are length-prefixed on the wire.
   --namespace <Ns>   File-scoped namespace for generated code (default: none)
   --public           Emit public visibility (default: implicit internal)
 
@@ -105,6 +108,23 @@ def enum_wire_type(min_val: int, max_val: int) -> str:
         elif min_val >= -32768      and max_val <= 32767:      return 'int16_t'
         elif min_val >= -2147483648 and max_val <= 2147483647: return 'int32_t'
         else:                                                   return 'int64_t'
+
+
+def length_prefix_type(array_len: int) -> str:
+    """Return the wire type for the length prefix based on array capacity."""
+    if array_len < 256:
+        return 'uint8_t'
+    elif array_len < 65536:
+        return 'uint16_t'
+    elif array_len <= 0xFFFFFFFF:
+        return 'uint32_t'
+    else:
+        error(f"Array length {array_len} exceeds UINT32_MAX")
+
+
+def length_prefix_size(array_len: int) -> int:
+    """Return the byte size of the length prefix for a given array capacity."""
+    return WIRE_TYPE_SIZES[length_prefix_type(array_len)]
 
 
 # ---------------------------------------------------------------------------
@@ -361,31 +381,34 @@ def parse_header(text: str) -> tuple:
 # ---------------------------------------------------------------------------
 
 def wire_size_of(wire_type: str, array_len, structs: dict,
-                 _visiting: frozenset = frozenset()) -> int:
+                 _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
     if wire_type in WIRE_TYPE_SIZES:
         element_size = WIRE_TYPE_SIZES[wire_type]
     elif wire_type in structs:
         if wire_type in _visiting:
             error(f"Circular struct reference detected involving '{wire_type}'")
-        element_size = struct_wire_size(wire_type, structs, _visiting | {wire_type})
+        element_size = struct_wire_size(wire_type, structs, _visiting | {wire_type}, fixed_mode=fixed_mode)
     else:
         error(f"Cannot determine wire size for type '{wire_type}'")
     count = array_len if array_len is not None else 1
-    return element_size * count
+    size = element_size * count
+    if not fixed_mode and array_len is not None:
+        size += length_prefix_size(array_len)
+    return size
 
 
 def struct_wire_size(struct_name: str, structs: dict,
-                     _visiting: frozenset = frozenset()) -> int:
+                     _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
     return sum(
-        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting)
+        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting, fixed_mode=fixed_mode)
         for f in structs[struct_name]['fields']
     )
 
 
-def compute_max_wire_size(structs: dict) -> int:
+def compute_max_wire_size(structs: dict, fixed_mode: bool = True) -> int:
     if not structs:
         return 0
-    return max(struct_wire_size(name, structs) for name in structs)
+    return max(struct_wire_size(name, structs, fixed_mode=fixed_mode) for name in structs)
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +561,8 @@ def gen_field_declarations(fields: list, structs: dict, member_vis: str) -> list
 # ---------------------------------------------------------------------------
 
 def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
-                       big_endian: bool, indent: str = "        ") -> list:
+                       big_endian: bool, indent: str = "        ",
+                       fixed_mode: bool = True) -> list:
     suffix = "BE" if big_endian else ""
     bp_read = bp_read_be if big_endian else bp_read_le
     all_struct_names = set(structs.keys())
@@ -557,57 +581,139 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
         inner2 = inner  + "    "
 
         if arr is not None and is_char_array(f):
-            # UTF-8 string: read arr bytes, decode, strip null terminator
-            lines.append(f"{indent}if (span.Length - offset < {arr}) return false;")
-            lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf8(span.Slice(offset, {arr}));")
-            lines.append(f"{indent}offset += {arr};")
+            if fixed_mode:
+                # UTF-8 string: read arr bytes, decode, strip null terminator
+                lines.append(f"{indent}if (span.Length - offset < {arr}) return false;")
+                lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf8(span.Slice(offset, {arr}));")
+                lines.append(f"{indent}offset += {arr};")
+            else:
+                # Variable: read length prefix, then that many bytes as UTF-8
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lines.append(f"{indent}if (span.Length - offset < {lp_sz}) return false;")
+                read_len = bp_read(lp_wt, "span", "offset")
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _len_{cs_field} = (int)({read_len});")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}if (_len_{cs_field} > {arr} || span.Length - offset < _len_{cs_field}) return false;")
+                lines.append(f"{inner}result.{cs_field} = Encoding.UTF8.GetString(span.Slice(offset, _len_{cs_field}));")
+                lines.append(f"{inner}offset += _len_{cs_field};")
+                lines.append(f"{indent}}}")
 
         elif arr is not None and is_wchar_array(f):
-            # UTF-16LE string: read arr*2 bytes, decode
-            byte_count = arr * 2
-            lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-            lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf16LE(span.Slice(offset, {byte_count}));")
-            lines.append(f"{indent}offset += {byte_count};")
+            if fixed_mode:
+                # UTF-16LE string: read arr*2 bytes, decode
+                byte_count = arr * 2
+                lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
+                lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf16LE(span.Slice(offset, {byte_count}));")
+                lines.append(f"{indent}offset += {byte_count};")
+            else:
+                # Variable: length prefix is count of wchar_t elements, each 2 bytes on wire
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lines.append(f"{indent}if (span.Length - offset < {lp_sz}) return false;")
+                read_len = bp_read(lp_wt, "span", "offset")
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _len_{cs_field} = (int)({read_len});")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}int _byteLen_{cs_field} = _len_{cs_field} * 2;")
+                lines.append(f"{inner}if (_len_{cs_field} > {arr} || span.Length - offset < _byteLen_{cs_field}) return false;")
+                lines.append(f"{inner}result.{cs_field} = Encoding.Unicode.GetString(span.Slice(offset, _byteLen_{cs_field}));")
+                lines.append(f"{inner}offset += _byteLen_{cs_field};")
+                lines.append(f"{indent}}}")
 
         elif arr is not None and is_struct_array(f, all_struct_names):
-            # IList<T>: read each element
-            nested_cs = to_dotnet_name(wt)
-            lines.append(f"{indent}{{")
-            lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>({arr});")
-            lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
-            lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
-            lines.append(f"{inner2}offset += _n_{cs_field};")
-            lines.append(f"{inner}}}")
-            lines.append(f"{inner}result.{cs_field} = _list_{cs_field};")
-            lines.append(f"{indent}}}")
+            if fixed_mode:
+                # IList<T>: read each element
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>({arr});")
+                lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
+                lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
+                lines.append(f"{inner2}offset += _n_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _list_{cs_field};")
+                lines.append(f"{indent}}}")
+            else:
+                nested_cs = to_dotnet_name(wt)
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lines.append(f"{indent}if (span.Length - offset < {lp_sz}) return false;")
+                read_len = bp_read(lp_wt, "span", "offset")
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _len_{cs_field} = (int)({read_len});")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}if (_len_{cs_field} > {arr}) return false;")
+                lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>(_len_{cs_field});")
+                lines.append(f"{inner}for (int i = 0; i < _len_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
+                lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
+                lines.append(f"{inner2}offset += _n_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _list_{cs_field};")
+                lines.append(f"{indent}}}")
 
         elif arr is not None:
-            # scalar or enum array -> T[]
-            cs_t = cs_wire_type(wt)
-            is_enum = f['is_enum']
-            enum_cs = to_dotnet_name(f['enum_c_name']) if is_enum else None
-            native = CS_NATIVE_TYPE_MAP.get(f['type'])
-            arr_type = enum_cs if is_enum else (native if native else cs_t)
-            lines.append(f"{indent}{{")
-            lines.append(f"{inner}var _arr_{cs_field} = new {arr_type}[{arr}];")
-            lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
-            read_expr = bp_read(wt, "span", "offset")
-            if is_enum:
-                lines.append(f"{inner2}_arr_{cs_field}[i] = ({enum_cs}){read_expr};")
-            elif f['type'] == 'bool':
-                lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr} != 0;")
-            elif native:
-                lines.append(f"{inner2}_arr_{cs_field}[i] = ({native}){read_expr};")
+            if fixed_mode:
+                # scalar or enum array -> T[]
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                enum_cs = to_dotnet_name(f['enum_c_name']) if is_enum else None
+                native = CS_NATIVE_TYPE_MAP.get(f['type'])
+                arr_type = enum_cs if is_enum else (native if native else cs_t)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}var _arr_{cs_field} = new {arr_type}[{arr}];")
+                lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                read_expr = bp_read(wt, "span", "offset")
+                if is_enum:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({enum_cs}){read_expr};")
+                elif f['type'] == 'bool':
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr} != 0;")
+                elif native:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({native}){read_expr};")
+                else:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr};")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _arr_{cs_field};")
+                lines.append(f"{indent}}}")
             else:
-                lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr};")
-            lines.append(f"{inner2}offset += {sz};")
-            lines.append(f"{inner}}}")
-            lines.append(f"{inner}result.{cs_field} = _arr_{cs_field};")
-            lines.append(f"{indent}}}")
+                # Variable: read length prefix, then elements
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                enum_cs = to_dotnet_name(f['enum_c_name']) if is_enum else None
+                native = CS_NATIVE_TYPE_MAP.get(f['type'])
+                arr_type = enum_cs if is_enum else (native if native else cs_t)
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lines.append(f"{indent}if (span.Length - offset < {lp_sz}) return false;")
+                read_len = bp_read(lp_wt, "span", "offset")
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _len_{cs_field} = (int)({read_len});")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}if (_len_{cs_field} > {arr}) return false;")
+                lines.append(f"{inner}var _arr_{cs_field} = new {arr_type}[_len_{cs_field}];")
+                lines.append(f"{inner}for (int i = 0; i < _len_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                read_expr = bp_read(wt, "span", "offset")
+                if is_enum:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({enum_cs}){read_expr};")
+                elif f['type'] == 'bool':
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr} != 0;")
+                elif native:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({native}){read_expr};")
+                else:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr};")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _arr_{cs_field};")
+                lines.append(f"{indent}}}")
 
         else:
             # single field
@@ -638,9 +744,11 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
 
 
 def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
-                        big_endian: bool, indent: str = "        ") -> list:
+                        big_endian: bool, indent: str = "        ",
+                        fixed_mode: bool = True) -> list:
     suffix = "BE" if big_endian else ""
     bp_write = bp_write_be if big_endian else bp_write_le
+    bp_read_fn = bp_read_be if big_endian else bp_read_le  # not used but kept for symmetry
     all_struct_names = set(structs.keys())
     lines = []
     lines.append(f"{indent}bytesWritten = 0;")
@@ -656,68 +764,155 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
         inner2 = inner  + "    "
 
         if arr is not None and is_char_array(f):
-            # UTF-8 string: encode and write exactly arr bytes, zero-padded, safe boundary truncation
-            lines.append(f"{indent}if (span.Length - offset < {arr}) return false;")
-            lines.append(f"{indent}Buffers.EncodeUtf8({cs_field}, span.Slice(offset, {arr}));")
-            lines.append(f"{indent}offset += {arr};")
+            if fixed_mode:
+                # UTF-8 string: encode and write exactly arr bytes, zero-padded
+                lines.append(f"{indent}if (span.Length - offset < {arr}) return false;")
+                lines.append(f"{indent}Buffers.EncodeUtf8({cs_field}, span.Slice(offset, {arr}));")
+                lines.append(f"{indent}offset += {arr};")
+            else:
+                # Variable: compute UTF-8 byte length, write prefix, then bytes
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lp_cs = cs_wire_type(lp_wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _byteLen_{cs_field} = string.IsNullOrEmpty({cs_field}) ? 0 : Encoding.UTF8.GetByteCount({cs_field});")
+                lines.append(f"{inner}if (_byteLen_{cs_field} > {arr}) _byteLen_{cs_field} = {arr};")
+                lines.append(f"{inner}if (span.Length - offset < {lp_sz} + _byteLen_{cs_field}) return false;")
+                write_len = bp_write(lp_wt, "span", "offset", f"({lp_cs})_byteLen_{cs_field}")
+                lines.append(f"{inner}{write_len}")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}if (_byteLen_{cs_field} > 0)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}Encoding.UTF8.GetBytes({cs_field}.AsSpan(), span.Slice(offset, _byteLen_{cs_field}));")
+                lines.append(f"{inner2}offset += _byteLen_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
 
         elif arr is not None and is_wchar_array(f):
-            # UTF-16LE string
-            byte_count = arr * 2
-            lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-            lines.append(f"{indent}Buffers.EncodeUtf16LE({cs_field}, span.Slice(offset, {byte_count}));")
-            lines.append(f"{indent}offset += {byte_count};")
+            if fixed_mode:
+                # UTF-16LE string
+                byte_count = arr * 2
+                lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
+                lines.append(f"{indent}Buffers.EncodeUtf16LE({cs_field}, span.Slice(offset, {byte_count}));")
+                lines.append(f"{indent}offset += {byte_count};")
+            else:
+                # Variable: length prefix is element count (wchar_t), each 2 bytes
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lp_cs = cs_wire_type(lp_wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _charLen_{cs_field} = string.IsNullOrEmpty({cs_field}) ? 0 : Math.Min({cs_field}.Length, {arr});")
+                lines.append(f"{inner}int _byteLen_{cs_field} = _charLen_{cs_field} * 2;")
+                lines.append(f"{inner}if (span.Length - offset < {lp_sz} + _byteLen_{cs_field}) return false;")
+                write_len = bp_write(lp_wt, "span", "offset", f"({lp_cs})_charLen_{cs_field}")
+                lines.append(f"{inner}{write_len}")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}if (_byteLen_{cs_field} > 0)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}Encoding.Unicode.GetBytes({cs_field}.AsSpan(0, _charLen_{cs_field}), span.Slice(offset, _byteLen_{cs_field}));")
+                lines.append(f"{inner2}offset += _byteLen_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
 
         elif arr is not None and is_struct_array(f, all_struct_names):
-            # IList<T>
-            nested_cs = to_dotnet_name(wt)
-            lines.append(f"{indent}{{")
-            lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Count, {arr}) : 0;")
-            lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
-            lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
-            lines.append(f"{inner2}offset += _w_{cs_field};")
-            lines.append(f"{inner}}}")
-            # zero-fill any un-written slots
-            nested_wire_sz = struct_wire_size(wt, structs)
-            lines.append(f"{inner}for (int i = _count_{cs_field}; i < {arr}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}span.Slice(offset, {nested_wire_sz}).Clear();")
-            lines.append(f"{inner2}offset += {nested_wire_sz};")
-            lines.append(f"{inner}}}")
-            lines.append(f"{indent}}}")
+            if fixed_mode:
+                # IList<T>
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Count, {arr}) : 0;")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
+                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{inner2}offset += _w_{cs_field};")
+                lines.append(f"{inner}}}")
+                # zero-fill any un-written slots
+                nested_wire_sz = struct_wire_size(wt, structs, fixed_mode=fixed_mode)
+                lines.append(f"{inner}for (int i = _count_{cs_field}; i < {arr}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}span.Slice(offset, {nested_wire_sz}).Clear();")
+                lines.append(f"{inner2}offset += {nested_wire_sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
+            else:
+                nested_cs = to_dotnet_name(wt)
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lp_cs = cs_wire_type(lp_wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Count, {arr}) : 0;")
+                lines.append(f"{inner}if (span.Length - offset < {lp_sz}) return false;")
+                write_len = bp_write(lp_wt, "span", "offset", f"({lp_cs})_count_{cs_field}")
+                lines.append(f"{inner}{write_len}")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
+                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{inner2}offset += _w_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
 
         elif arr is not None:
-            # scalar or enum array
-            cs_t = cs_wire_type(wt)
-            is_enum = f['is_enum']
-            lines.append(f"{indent}{{")
-            lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Length, {arr}) : 0;")
-            lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
-            if is_enum:
-                val_expr = f"({cs_t}){cs_field}[i]"
-            elif f['type'] == 'bool':
-                val_expr = f"(byte)({cs_field}[i] ? 1 : 0)"
-            elif f['type'] in CS_NATIVE_TYPE_MAP:
-                val_expr = f"({cs_t}){cs_field}[i]"
+            if fixed_mode:
+                # scalar or enum array
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Length, {arr}) : 0;")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                if is_enum:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                elif f['type'] == 'bool':
+                    val_expr = f"(byte)({cs_field}[i] ? 1 : 0)"
+                elif f['type'] in CS_NATIVE_TYPE_MAP:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                else:
+                    val_expr = f"{cs_field}[i]"
+                write_stmt = bp_write(wt, "span", "offset", val_expr)
+                lines.append(f"{inner2}{write_stmt}")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                # zero-fill remaining slots
+                lines.append(f"{inner}for (int i = _count_{cs_field}; i < {arr}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                zero_stmt = bp_write(wt, "span", "offset", f"({cs_t})0")
+                lines.append(f"{inner2}{zero_stmt}")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
             else:
-                val_expr = f"{cs_field}[i]"
-            write_stmt = bp_write(wt, "span", "offset", val_expr)
-            lines.append(f"{inner2}{write_stmt}")
-            lines.append(f"{inner2}offset += {sz};")
-            lines.append(f"{inner}}}")
-            # zero-fill remaining slots
-            lines.append(f"{inner}for (int i = _count_{cs_field}; i < {arr}; i++)")
-            lines.append(f"{inner}{{")
-            lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
-            zero_stmt = bp_write(wt, "span", "offset", f"({cs_t})0")
-            lines.append(f"{inner2}{zero_stmt}")
-            lines.append(f"{inner2}offset += {sz};")
-            lines.append(f"{inner}}}")
-            lines.append(f"{indent}}}")
+                # Variable: write length prefix then elements, no zero-fill
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                lp_wt = length_prefix_type(arr)
+                lp_sz = WIRE_TYPE_SIZES[lp_wt]
+                lp_cs = cs_wire_type(lp_wt)
+                lines.append(f"{indent}{{")
+                lines.append(f"{inner}int _count_{cs_field} = {cs_field} != null ? Math.Min({cs_field}.Length, {arr}) : 0;")
+                lines.append(f"{inner}if (span.Length - offset < {lp_sz}) return false;")
+                write_len = bp_write(lp_wt, "span", "offset", f"({lp_cs})_count_{cs_field}")
+                lines.append(f"{inner}{write_len}")
+                lines.append(f"{inner}offset += {lp_sz};")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                if is_enum:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                elif f['type'] == 'bool':
+                    val_expr = f"(byte)({cs_field}[i] ? 1 : 0)"
+                elif f['type'] in CS_NATIVE_TYPE_MAP:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                else:
+                    val_expr = f"{cs_field}[i]"
+                write_stmt = bp_write(wt, "span", "offset", val_expr)
+                lines.append(f"{inner2}{write_stmt}")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{indent}}}")
 
         else:
             # single field
@@ -751,7 +946,8 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
 # ---------------------------------------------------------------------------
 
 def gen_struct_cs(struct_name: str, info: dict, structs: dict,
-                  enums: dict, type_vis: str, member_vis: str, wire_size: int) -> str:
+                  enums: dict, type_vis: str, member_vis: str, wire_size: int,
+                  fixed_mode: bool = True) -> str:
     cs_name = info['cs_name']
     fields = info['fields']
     lines = []
@@ -760,7 +956,7 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
     lines.append("{")
 
     # Field declarations
-    lines.append(f"    {member_vis}const int SizeOfStruct = {struct_wire_size(struct_name,structs)};")
+    lines.append(f"    {member_vis}const int SizeOfStruct = {struct_wire_size(struct_name,structs, fixed_mode=fixed_mode)};")
     lines.append("")
     lines.extend(gen_field_declarations(fields, structs, member_vis))
     lines.append("")
@@ -771,13 +967,13 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
 
         lines.append(f"    private static bool TryRead{suffix}Core(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
         lines.append("    {")
-        lines.extend(gen_span_read_core(cs_name, fields, structs, big_endian))
+        lines.extend(gen_span_read_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
         lines.append("    }")
         lines.append("")
 
         lines.append(f"    private bool TryWrite{suffix}Core(Span<byte> span, out int bytesWritten)")
         lines.append("    {")
-        lines.extend(gen_span_write_core(cs_name, fields, structs, big_endian))
+        lines.extend(gen_span_write_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
         lines.append("    }")
         lines.append("")
 
@@ -860,11 +1056,11 @@ def gen_maxsize_cs(header_stem: str, max_size: int, type_vis: str, member_vis: s
 # ---------------------------------------------------------------------------
 
 def generate_cs_file(header_path: str, structs: dict, enums: dict,
-                     namespace: str, is_public: bool) -> str:
+                     namespace: str, is_public: bool, fixed_mode: bool = True) -> str:
     type_vis   = "public " if is_public else ""
     member_vis = "public " if is_public else "internal "
     stem = os.path.splitext(os.path.basename(header_path))[0]
-    max_size = compute_max_wire_size(structs)
+    max_size = compute_max_wire_size(structs, fixed_mode=fixed_mode)
 
     lines = []
     lines.append("// Auto-generated by buffers_gen_cs.py — do not edit manually.")
@@ -892,8 +1088,8 @@ def generate_cs_file(header_path: str, structs: dict, enums: dict,
 
     # Structs
     for struct_name, info in structs.items():
-        wire_size = struct_wire_size(struct_name, structs)
-        lines.append(gen_struct_cs(struct_name, info, structs, enums, type_vis, member_vis, wire_size))
+        wire_size = struct_wire_size(struct_name, structs, fixed_mode=fixed_mode)
+        lines.append(gen_struct_cs(struct_name, info, structs, enums, type_vis, member_vis, wire_size, fixed_mode=fixed_mode))
         lines.append("")
 
     lines.append("#nullable restore")
@@ -991,6 +1187,7 @@ def main():
     is_public = False
     gen_buffers = False
     out_dir = ""
+    fixed_mode = False  # Default: variable-length (length-prefixed) serialization
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--namespace':
@@ -1003,11 +1200,13 @@ def main():
             gen_buffers = True
         elif opt == '--out':
             out_dir = args.pop(0)
+        elif opt == '--fixed':
+            fixed_mode = True
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--namespace <Ns>] [--public] [--buffers] <header.h>",
+        print(f"Usage: {sys.argv[0]} [--fixed] [--namespace <Ns>] [--public] [--buffers] <header.h>",
               file=sys.stderr)
         sys.exit(1)
 
@@ -1031,7 +1230,7 @@ def main():
     cs_path      = os.path.join(out_dir, f"{cs_stem}Buffers.cs")
     
     with open(cs_path, 'w') as f:
-        f.write(generate_cs_file(path, structs, enums, namespace, is_public))
+        f.write(generate_cs_file(path, structs, enums, namespace, is_public, fixed_mode=fixed_mode))
     print(f"Written: {cs_path}")
     
     if gen_buffers:

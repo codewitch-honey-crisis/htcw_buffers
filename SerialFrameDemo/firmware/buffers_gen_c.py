@@ -3,9 +3,12 @@
 buffers_gen_c.py - Parse wire structs from a C header and generate
                    read/write functions for each struct.
 
-Usage: python buffers_gen_c.py [--prefix <pfx>] [--buffers] [--out <dir>] <header.h>
+Usage: python buffers_gen_c.py [--fixed] [--prefix <pfx>] [--buffers] [--out <dir>] <header.h>
 
 Options:
+  --fixed           Use fixed-size serialization for arrays and strings
+                   (transmit entire declared size). Without this flag,
+                   arrays/strings are length-prefixed on the wire.
   --prefix <pfx>   Prepend <pfx> to every generated function name and
                    per-struct #define (not to the MAX_SIZE define).
   --buffers        Also emit buffers.h / buffers.c support files.
@@ -85,6 +88,23 @@ def enum_wire_type(min_val: int, max_val: int) -> str:
         elif min_val >= -32768       and max_val <= 32767:       return 'int16_t'
         elif min_val >= -2147483648  and max_val <= 2147483647:  return 'int32_t'
         else:                                                    return 'int64_t'
+
+
+def length_prefix_type(array_len: int) -> str:
+    """Return the wire type for the length prefix based on array capacity."""
+    if array_len < 256:
+        return 'uint8_t'
+    elif array_len < 65536:
+        return 'uint16_t'
+    elif array_len <= 0xFFFFFFFF:
+        return 'uint32_t'
+    else:
+        error(f"Array length {array_len} exceeds UINT32_MAX")
+
+
+def length_prefix_size(array_len: int) -> int:
+    """Return the byte size of the length prefix for a given array capacity."""
+    return WIRE_TYPE_SIZES[length_prefix_type(array_len)]
 
 
 # ---------------------------------------------------------------------------
@@ -295,35 +315,40 @@ def parse_header(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def wire_size_of(wire_type: str, array_len, structs: dict,
-                 _visiting: frozenset = frozenset()) -> int:
-    """Return the wire byte size of a single field, recursing into nested structs."""
+                 _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
+    """Return the wire byte size of a single field, recursing into nested structs.
+    In fixed mode, arrays use their full declared size.
+    In variable mode, arrays use their max size (full declared size + length prefix)."""
     if wire_type in WIRE_TYPE_SIZES:
         element_size = WIRE_TYPE_SIZES[wire_type]
     elif wire_type in structs:
         if wire_type in _visiting:
             error(f"Circular struct reference detected involving '{wire_type}'")
-        element_size = struct_wire_size(wire_type, structs, _visiting | {wire_type})
+        element_size = struct_wire_size(wire_type, structs, _visiting | {wire_type}, fixed_mode=fixed_mode)
     else:
         error(f"Cannot determine wire size for type '{wire_type}'")
 
     count = array_len if array_len is not None else 1
-    return element_size * count
+    size = element_size * count
+    if not fixed_mode and array_len is not None:
+        size += length_prefix_size(array_len)
+    return size
 
 
 def struct_wire_size(struct_name: str, structs: dict,
-                     _visiting: frozenset = frozenset()) -> int:
+                     _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
     """Return the total wire byte size of a single instance of struct_name."""
     return sum(
-        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting)
+        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting, fixed_mode=fixed_mode)
         for f in structs[struct_name]['fields']
     )
 
 
-def compute_max_wire_size(structs: dict) -> int:
+def compute_max_wire_size(structs: dict, fixed_mode: bool = True) -> int:
     """Return the maximum wire size across all top-level structs."""
     if not structs:
         return 0
-    return max(struct_wire_size(name, structs) for name in structs)
+    return max(struct_wire_size(name, structs, fixed_mode=fixed_mode) for name in structs)
 
 # ---------------------------------------------------------------------------
 # Code generation
@@ -379,7 +404,7 @@ def gen_enum_write_fn(enum_name, wire_type):
     lines.append("}")
     return "\n".join(lines)
 
-def gen_write_fn(prefix, struct_name, fields, all_struct_names):
+def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True):
     fn = write_fn_name(prefix, struct_name)
     lines = [f"int {fn}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state) {{"]
     if not fields:
@@ -389,10 +414,33 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names):
         for i, f in enumerate(fields):
             is_last = (i == len(fields) - 1)
             if f['array_len'] is not None:
-                lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
-                stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ")
-                lines.extend(stmts)
-                lines.append("    }")
+                if fixed_mode:
+                    lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ")
+                    lines.extend(stmts)
+                    lines.append("    }")
+                else:
+                    # Variable mode: compute length, write prefix, then elements
+                    lp_type = length_prefix_type(f['array_len'])
+                    is_string = (f['type'] == 'char')
+                    lines.append(f"    {{")
+                    if is_string:
+                        # For strings, compute length via strlen, capped at array_len
+                        lines.append(f"        {lp_type} _len_{f['name']} = 0;")
+                        lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                        lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
+                        lines.append(f"            _len_{f['name']}++;")
+                        lines.append(f"        }}")
+                    else:
+                        # For non-string arrays, always write all elements
+                        lines.append(f"        {lp_type} _len_{f['name']} = {f['array_len']};")
+                    lines.append(f"        res = buffers_write_{lp_type}(_len_{f['name']}, on_write, on_write_state);")
+                    lines.append(f"        if(res < 0) {{ return res; }}")
+                    lines.append(f"        for(int i = 0; i < (int)_len_{f['name']}; ++i) {{")
+                    stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="            ")
+                    lines.extend(stmts)
+                    lines.append(f"        }}")
+                    lines.append(f"    }}")
             else:
                 stmts = gen_write_call(prefix, f, f"s->{f['name']}", all_struct_names)
                 lines.append(stmts[0])
@@ -414,7 +462,7 @@ def gen_enum_read_fn(enum_name, wire_type):
     lines.append("}")
     return "\n".join(lines)
 
-def gen_read_fn(prefix, struct_name, fields, all_struct_names):
+def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True):
     fn = read_fn_name(prefix, struct_name)
     lines = [f"int {fn}({struct_name}* s, buffers_read_callback_t on_read, void* on_read_state) {{"]
     if not fields:
@@ -424,10 +472,39 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names):
         for i, f in enumerate(fields):
             is_last = (i == len(fields) - 1)
             if f['array_len'] is not None:
-                lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
-                stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ")
-                lines.extend(stmts)
-                lines.append("    }")
+                if fixed_mode:
+                    # Fixed mode: read all array_len elements
+                    lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ")
+                    lines.extend(stmts)
+                    lines.append("    }")
+                else:
+                    # Variable mode: read length prefix, then that many elements
+                    lp_type = length_prefix_type(f['array_len'])
+                    lp_cs = lp_type  # e.g. uint8_t, uint16_t, uint32_t
+                    is_string = (f['type'] == 'char')
+                    lines.append(f"    {{")
+                    lines.append(f"        {lp_cs} _len_{f['name']};")
+                    lines.append(f"        res = buffers_read_{lp_cs}(&_len_{f['name']}, on_read, on_read_state);")
+                    lines.append(f"        if(res < 0) {{ return res; }}")
+                    lines.append(f"        if(_len_{f['name']} > {f['array_len']}) {{ return BUFFERS_ERROR_EOF; }}")
+                    lines.append(f"        for(int i = 0; i < (int)_len_{f['name']}; ++i) {{")
+                    stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="            ")
+                    lines.extend(stmts)
+                    lines.append(f"        }}")
+                    if is_string:
+                        # Place null terminator if there's room
+                        lines.append(f"        if(_len_{f['name']} < {f['array_len']}) {{")
+                        lines.append(f"            s->{f['name']}[_len_{f['name']}] = '\\0';")
+                        lines.append(f"        }}")
+                    else:
+                        # Zero remaining elements
+                        elem_size = WIRE_TYPE_SIZES.get(f['wire_type'], 0)
+                        if elem_size > 0:
+                            lines.append(f"        for(int i = (int)_len_{f['name']}; i < {f['array_len']}; ++i) {{")
+                            lines.append(f"            memset(&s->{f['name']}[i], 0, sizeof(s->{f['name']}[i]));")
+                            lines.append(f"        }}")
+                    lines.append(f"    }}")
             else:
                 stmts = gen_read_call(prefix, f, f"s->{f['name']}", all_struct_names)
                 lines.append(stmts[0])
@@ -438,35 +515,13 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names):
     return "\n".join(lines)
 
 
-def gen_write_fn(prefix, struct_name, fields, all_struct_names):
-    fn = write_fn_name(prefix, struct_name)
-    lines = [f"int {fn}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state) {{"]
-    if not fields:
-        lines.append("    return 0;")
-    else:
-        lines.append("    int res;")
-        for i, f in enumerate(fields):
-            is_last = (i == len(fields) - 1)
-            if f['array_len'] is not None:
-                lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
-                stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ")
-                lines.extend(stmts)
-                lines.append("    }")
-            else:
-                stmts = gen_write_call(prefix, f, f"s->{f['name']}", all_struct_names)
-                lines.append(stmts[0])
-                if not is_last:
-                    lines.append(stmts[1])
-        lines.append("    return res;")
-    lines.append("}")
-    return "\n".join(lines)
 
 
-def generate_h(header_path, user_prefix, structs):
+def generate_h(header_path, user_prefix, structs, fixed_mode=True):
     stem = os.path.splitext(os.path.basename(header_path))[0]
     guard = f"{stem.upper()}_BUFFERS_H"
     define_prefix = header_stem_to_define_prefix(header_path)
-    max_size = compute_max_wire_size(structs)                 
+    max_size = compute_max_wire_size(structs, fixed_mode=fixed_mode)
     lines = [
         f"#ifndef {guard}",
         f"#define {guard}",
@@ -476,7 +531,7 @@ def generate_h(header_path, user_prefix, structs):
         f"#define {define_prefix}_MAX_SIZE ({max_size})",
     ]
     for struct_name in structs:
-        size = struct_wire_size(struct_name, structs)
+        size = struct_wire_size(struct_name, structs, fixed_mode=fixed_mode)
         define = struct_size_define_name(struct_name, user_prefix)
         lines.append(f"#define {define} ({size})")
     lines += [
@@ -494,7 +549,7 @@ def generate_h(header_path, user_prefix, structs):
     return "\n".join(lines)
 
 
-def generate_c(header_path, user_prefix, structs):
+def generate_c(header_path, user_prefix, structs, fixed_mode=True):
     stem = os.path.splitext(os.path.basename(header_path))[0]
     all_struct_names = set(structs.keys())
     lines = [
@@ -515,9 +570,9 @@ def generate_c(header_path, user_prefix, structs):
         lines.append("")
 
     for struct_name, info in structs.items():
-        lines.append(gen_read_fn(user_prefix, struct_name, info['fields'], all_struct_names))
+        lines.append(gen_read_fn(user_prefix, struct_name, info['fields'], all_struct_names, fixed_mode=fixed_mode))
         lines.append("")
-        lines.append(gen_write_fn(user_prefix, struct_name, info['fields'], all_struct_names))
+        lines.append(gen_write_fn(user_prefix, struct_name, info['fields'], all_struct_names, fixed_mode=fixed_mode))
         lines.append("")
     return "\n".join(lines)
 
@@ -945,6 +1000,7 @@ def main():
     gen_buffers = False
     out_dir = ""
     user_prefix = ""
+    fixed_mode = False  # Default: variable-length (length-prefixed) serialization
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--buffers':
@@ -957,11 +1013,13 @@ def main():
             if not args:
                 error("--prefix requires an argument")
             user_prefix = args.pop(0)
+        elif opt == '--fixed':
+            fixed_mode = True
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--buffers] [--out <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
+        print(f"Usage: {sys.argv[0]} [--fixed] [--buffers] [--out <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
         sys.exit(1)
 
     path = args[0]
@@ -984,9 +1042,9 @@ def main():
     c_path = os.path.join(out_dir, f"{stem}_buffers.c")
 
     with open(h_path, 'w') as f:
-        f.write(generate_h(path, user_prefix, structs))
+        f.write(generate_h(path, user_prefix, structs, fixed_mode=fixed_mode))
     with open(c_path, 'w') as f:
-        f.write(generate_c(path, user_prefix, structs))
+        f.write(generate_c(path, user_prefix, structs, fixed_mode=fixed_mode))
 
     print(f"Written: {h_path}")
     print(f"Written: {c_path}")

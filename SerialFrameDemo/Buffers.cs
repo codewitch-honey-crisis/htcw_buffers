@@ -32,7 +32,7 @@ internal static class Buffers
     /// Decode a fixed-length UTF-16LE byte field into a string.
     /// Strips everything at and after the first null char (0x0000).
     /// </summary>
-    internal static string DecodeUtf16Le(ReadOnlySpan<byte> span)
+    internal static string DecodeUtf16LE(ReadOnlySpan<byte> span)
     {
         // Find first null char (two zero bytes aligned on even boundary)
         int len = span.Length & ~1; // round down to even
@@ -63,7 +63,7 @@ internal static class Buffers
     /// Uses Encoder.Convert to guarantee truncation on a valid code-unit
     /// boundary — surrogate pairs are never split.
     /// </summary>
-    internal static void EncodeUtf16Le(string value, Span<byte> dest)
+    internal static void EncodeUtf16LE(string value, Span<byte> dest)
     {
         dest.Clear();
         if (string.IsNullOrEmpty(value)) return;
