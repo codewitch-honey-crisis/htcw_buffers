@@ -942,6 +942,58 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
 
 
 # ---------------------------------------------------------------------------
+# Computed SizeOfStruct property body (variable-length mode only)
+# ---------------------------------------------------------------------------
+
+def gen_size_of_struct_body(fields: list, structs: dict, prefix: str = "            ") -> list:
+    """Generate the body of the SizeOfStruct property getter that computes
+    the actual wire size of this instance."""
+    all_struct_names = set(structs.keys())
+    lines = []
+    lines.append(f"{prefix}int size = 0;")
+
+    for f in fields:
+        cs_field = f['cs_name']
+        wt = f['wire_type']
+        sz = WIRE_TYPE_SIZES.get(wt, 0)
+        arr = f['array_len']
+        is_struct = wt in all_struct_names
+
+        if arr is not None:
+            lp_wt = length_prefix_type(arr)
+            lp_sz = WIRE_TYPE_SIZES[lp_wt]
+
+            if is_char_array(f):
+                # string: prefix + UTF-8 byte count
+                lines.append(f"{prefix}size += {lp_sz} + (string.IsNullOrEmpty({cs_field}) ? 0 : Math.Min(Encoding.UTF8.GetByteCount({cs_field}), {arr}));")
+            elif is_wchar_array(f):
+                # wchar string: prefix + char count * 2
+                lines.append(f"{prefix}size += {lp_sz} + (string.IsNullOrEmpty({cs_field}) ? 0 : Math.Min({cs_field}.Length, {arr}) * 2);")
+            elif is_struct_array(f, all_struct_names):
+                # struct array: prefix + sum of nested sizes
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{prefix}{{")
+                lines.append(f"{prefix}    size += {lp_sz};")
+                lines.append(f"{prefix}    if ({cs_field} != null)")
+                lines.append(f"{prefix}        for (int i = 0; i < Math.Min({cs_field}.Count, {arr}); i++)")
+                lines.append(f"{prefix}            size += {cs_field}[i].SizeOfStruct;")
+                lines.append(f"{prefix}}}")
+            else:
+                # scalar/enum array: prefix + count * element size
+                # non-string arrays always write all elements
+                lines.append(f"{prefix}size += {lp_sz} + {arr} * {sz};")
+        else:
+            if is_struct:
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{prefix}size += {cs_field} != null ? {cs_field}.SizeOfStruct : 0;")
+            else:
+                lines.append(f"{prefix}size += {sz};")
+
+    lines.append(f"{prefix}return size;")
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Per-struct C# class generation
 # ---------------------------------------------------------------------------
 
@@ -955,11 +1007,23 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
     lines.append(f"{type_vis}partial class {cs_name}")
     lines.append("{")
 
-    # Field declarations
-    lines.append(f"    {member_vis}const int SizeOfStruct = {struct_wire_size(struct_name,structs, fixed_mode=fixed_mode)};")
+    # Max size constant (always present)
+    lines.append(f"    {member_vis}const int StructMaxSize = {struct_wire_size(struct_name,structs, fixed_mode=fixed_mode)};")
     lines.append("")
+
     lines.extend(gen_field_declarations(fields, structs, member_vis))
     lines.append("")
+
+    # Computed instance SizeOfStruct property (only in variable-length mode)
+    if not fixed_mode:
+        lines.append(f"    {member_vis}int SizeOfStruct")
+        lines.append("    {")
+        lines.append("        get")
+        lines.append("        {")
+        lines.extend(gen_size_of_struct_body(fields, structs, prefix="            "))
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("")
 
     # Private span cores (LE and BE)
     for big_endian in (False, True):

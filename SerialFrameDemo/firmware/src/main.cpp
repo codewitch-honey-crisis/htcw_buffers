@@ -73,7 +73,7 @@ static void loop() {
                     resp.minor = ESP_IDF_VERSION_MINOR;
                     resp.patch = ESP_IDF_VERSION_PATCH;
                     st_esp_idf_version_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,ST_ESP_IDF_VERSION_RESPONSE_MESSAGE_SIZE);
+                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,st_esp_idf_version_response_message_size(&resp));
                 }
             }
             break;
@@ -86,7 +86,7 @@ static void loop() {
                     st_rng_response_message_t resp;
                     resp.value = esp_random();
                     st_rng_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,ST_RNG_RESPONSE_MESSAGE_SIZE);
+                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,st_rng_response_message_size(&resp));
                 }
             }
             break;
@@ -107,7 +107,7 @@ static void loop() {
                     st_gpio_get_response_message_t resp;
                     resp.values = result;
                     st_gpio_get_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,ST_GPIO_GET_RESPONSE_MESSAGE_SIZE);
+                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,st_gpio_get_response_message_size(&resp));
                 }
             }
             break;
@@ -163,7 +163,7 @@ static void loop() {
                     memset(&resp,0,sizeof(resp));
                     esp_read_mac(resp.address,ESP_MAC_BASE);
                     st_mac_address_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,ST_MAC_ADDRESS_RESPONSE_MESSAGE_SIZE);
+                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,st_mac_address_response_message_size(&resp));
                 }
             }
             break;

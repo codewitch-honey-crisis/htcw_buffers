@@ -40,8 +40,17 @@ struct InterfaceMaxSize
 
 partial class STEspIdfVersionMessage
 {
-    internal const int SizeOfStruct = 0;
+    internal const int StructMaxSize = 0;
 
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STEspIdfVersionMessage result, out int bytesRead)
     {
@@ -133,8 +142,17 @@ partial class STEspIdfVersionMessage
 
 partial class STRngMessage
 {
-    internal const int SizeOfStruct = 0;
+    internal const int StructMaxSize = 0;
 
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STRngMessage result, out int bytesRead)
     {
@@ -226,9 +244,19 @@ partial class STRngMessage
 
 partial class STGpioGetMessage
 {
-    internal const int SizeOfStruct = 8;
+    internal const int StructMaxSize = 8;
 
     internal ulong Mask { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 8;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioGetMessage result, out int bytesRead)
     {
@@ -332,10 +360,21 @@ partial class STGpioGetMessage
 
 partial class STGpioSetMessage
 {
-    internal const int SizeOfStruct = 16;
+    internal const int StructMaxSize = 16;
 
     internal ulong Mask { get; set; }
     internal ulong Values { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 8;
+            size += 8;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioSetMessage result, out int bytesRead)
     {
@@ -451,10 +490,21 @@ partial class STGpioSetMessage
 
 partial class STGpioModeMessage
 {
-    internal const int SizeOfStruct = 2;
+    internal const int StructMaxSize = 2;
 
     internal byte Gpio { get; set; }
     internal STGpioMode Mode { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 1;
+            size += 1;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioModeMessage result, out int bytesRead)
     {
@@ -570,8 +620,17 @@ partial class STGpioModeMessage
 
 partial class STMacAddressMessage
 {
-    internal const int SizeOfStruct = 0;
+    internal const int StructMaxSize = 0;
 
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STMacAddressMessage result, out int bytesRead)
     {
@@ -663,12 +722,25 @@ partial class STMacAddressMessage
 
 partial class STEspIdfVersionResponseMessage
 {
-    internal const int SizeOfStruct = 68;
+    internal const int StructMaxSize = 68;
 
     internal string Version { get; set; }
     internal byte Major { get; set; }
     internal byte Minor { get; set; }
     internal byte Patch { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 1 + (string.IsNullOrEmpty(Version) ? 0 : Math.Min(Encoding.UTF8.GetByteCount(Version), 64));
+            size += 1;
+            size += 1;
+            size += 1;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STEspIdfVersionResponseMessage result, out int bytesRead)
     {
@@ -836,9 +908,19 @@ partial class STEspIdfVersionResponseMessage
 
 partial class STRngResponseMessage
 {
-    internal const int SizeOfStruct = 4;
+    internal const int StructMaxSize = 4;
 
     internal uint Value { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 4;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STRngResponseMessage result, out int bytesRead)
     {
@@ -942,9 +1024,19 @@ partial class STRngResponseMessage
 
 partial class STGpioGetResponseMessage
 {
-    internal const int SizeOfStruct = 8;
+    internal const int StructMaxSize = 8;
 
     internal ulong Values { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 8;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STGpioGetResponseMessage result, out int bytesRead)
     {
@@ -1048,9 +1140,19 @@ partial class STGpioGetResponseMessage
 
 partial class STMacAddressResponseMessage
 {
-    internal const int SizeOfStruct = 7;
+    internal const int StructMaxSize = 7;
 
     internal byte[] Address { get; set; }
+
+    internal int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            size += 1 + 6 * 1;
+            return size;
+        }
+    }
 
     private static bool TryReadCore(ReadOnlySpan<byte> span, out STMacAddressResponseMessage result, out int bytesRead)
     {

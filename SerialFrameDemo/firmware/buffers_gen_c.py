@@ -363,6 +363,10 @@ def write_fn_name(user_prefix, struct_name):
     return f"{user_prefix}{type_fn_suffix(struct_name)}_write"
 
 
+def size_fn_name(user_prefix, struct_name):
+    return f"{user_prefix}{type_fn_suffix(struct_name)}_size"
+
+
 def gen_read_call(prefix, field, accessor, all_struct_names, indent="    "):
     wt = field['wire_type']
     if wt in all_struct_names:
@@ -449,6 +453,64 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True)
         lines.append("    return res;")
     lines.append("}")
     return "\n".join(lines)
+
+
+def gen_size_fn(prefix, struct_name, fields, all_struct_names):
+    """Generate a function that computes the actual wire size of a struct instance
+    (only used in variable-length mode)."""
+    fn = size_fn_name(prefix, struct_name)
+    lines = [f"size_t {fn}(const {struct_name}* s) {{"]
+    lines.append("    size_t size = 0;")
+    for f in fields:
+        if f['array_len'] is not None:
+            lp_type = length_prefix_type(f['array_len'])
+            lp_sz = WIRE_TYPE_SIZES[lp_type]
+            is_string = (f['type'] == 'char')
+            wt = f['wire_type']
+
+            if wt in all_struct_names:
+                # nested struct array: length prefix + sum of nested sizes
+                nested_size_fn = size_fn_name(prefix, wt)
+                lines.append(f"    {{")
+                if is_string:
+                    # string of structs doesn't really make sense, but handle generically
+                    lines.append(f"        size += {lp_sz};")
+                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
+                    lines.append(f"        }}")
+                else:
+                    lines.append(f"        size += {lp_sz};")
+                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
+                    lines.append(f"        }}")
+                lines.append(f"    }}")
+            else:
+                elem_sz = WIRE_TYPE_SIZES.get(wt, 0)
+                if is_string:
+                    # For strings: prefix + strlen (up to array_len)
+                    lines.append(f"    {{")
+                    lines.append(f"        {lp_type} _len = 0;")
+                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
+                    lines.append(f"            _len++;")
+                    lines.append(f"        }}")
+                    lines.append(f"        size += {lp_sz} + (size_t)_len * {elem_sz};")
+                    lines.append(f"    }}")
+                else:
+                    # Non-string array: prefix + full array (always writes all elements)
+                    lines.append(f"    size += {lp_sz} + (size_t){f['array_len']} * {elem_sz};")
+        else:
+            wt = f['wire_type']
+            if wt in all_struct_names:
+                nested_size_fn = size_fn_name(prefix, wt)
+                lines.append(f"    size += {nested_size_fn}(&s->{f['name']});")
+            else:
+                sz = WIRE_TYPE_SIZES.get(wt, 0)
+                lines.append(f"    size += {sz};")
+    lines.append("    return size;")
+    lines.append("}")
+    return "\n".join(lines)
+
 
 def gen_enum_read_fn(enum_name, wire_type):
     fn = f"read_{enum_name}"
@@ -544,6 +606,8 @@ def generate_h(header_path, user_prefix, structs, fixed_mode=True):
     for struct_name in structs:
         lines.append(f"int {read_fn_name(user_prefix, struct_name)}({struct_name}* s, buffers_read_callback_t on_read, void* on_read_state);")
         lines.append(f"int {write_fn_name(user_prefix, struct_name)}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state);")
+        if not fixed_mode:
+            lines.append(f"size_t {size_fn_name(user_prefix, struct_name)}(const {struct_name}* s);")
         lines.append("")
     lines += ["#ifdef __cplusplus", "}", "#endif", f"#endif /* {guard} */", ""]
     return "\n".join(lines)
@@ -574,6 +638,9 @@ def generate_c(header_path, user_prefix, structs, fixed_mode=True):
         lines.append("")
         lines.append(gen_write_fn(user_prefix, struct_name, info['fields'], all_struct_names, fixed_mode=fixed_mode))
         lines.append("")
+        if not fixed_mode:
+            lines.append(gen_size_fn(user_prefix, struct_name, info['fields'], all_struct_names))
+            lines.append("")
     return "\n".join(lines)
 
 
