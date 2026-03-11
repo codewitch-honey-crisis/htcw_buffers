@@ -28,12 +28,12 @@ extern "C" void app_main() {
     xTaskCreate(loop_task,"loop_task",8192,NULL,1,&loop_handle);
 }
 typedef struct {
-    size_t remaining;
     uint8_t* ptr;
+    size_t remaining;
 } buffer_write_cursor_t;
 typedef struct {
-    size_t remaining;
     const uint8_t* ptr;
+    size_t remaining;
 } buffer_read_cursor_t;
 int on_write_buffer(uint8_t value, void* state) {
     buffer_write_cursor_t* cur = (buffer_write_cursor_t*)state;
@@ -63,10 +63,10 @@ static void loop() {
         switch((st_message_command_t)cmd) {
             case CMD_ESP_IDF_VERSION: {
                 st_esp_idf_version_message_t msg;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_esp_idf_version_message_read(&msg,on_read_buffer,&read_cur)) {
                     puts("ESP-IDF version requested");
-                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_esp_idf_version_response_message_t resp;
                     strcpy(resp.version,esp_get_idf_version());
                     resp.major = ESP_IDF_VERSION_MAJOR;
@@ -79,10 +79,10 @@ static void loop() {
             break;
             case CMD_RNG: {
                 st_rng_message_t msg;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_rng_message_read(&msg,on_read_buffer,&read_cur)) {
                     puts("RNG generation requested");
-                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_rng_response_message_t resp;
                     resp.value = esp_random();
                     st_rng_response_message_write(&resp,on_write_buffer,&write_cur);
@@ -93,7 +93,7 @@ static void loop() {
             case CMD_GPIO_GET: {
                 st_gpio_get_message_t msg;
                 uint64_t result = 0;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_gpio_get_message_read(&msg,on_read_buffer,&read_cur)) {
                     for(int i = 0; i<64;++i) {
                         if(0!=(msg.mask & (((uint64_t)1)<<i))) {
@@ -103,7 +103,7 @@ static void loop() {
                             }
                         }
                     }
-                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_gpio_get_response_message_t resp;
                     resp.values = result;
                     st_gpio_get_response_message_write(&resp,on_write_buffer,&write_cur);
@@ -113,7 +113,7 @@ static void loop() {
             break;
             case CMD_GPIO_SET: {
                 st_gpio_set_message_t msg;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_gpio_set_message_read(&msg,on_read_buffer,&read_cur)) {
                     for(int i = 0; i<64;++i) {
                         if(0!=(msg.mask & (((uint64_t)1)<<i))) {
@@ -126,7 +126,7 @@ static void loop() {
             break;
             case CMD_GPIO_MODE: {
                 st_gpio_mode_message_t msg;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_gpio_mode_message_read(&msg,on_read_buffer,&read_cur)) {
                     printf("GPIO set mode for %d\n",(int)msg.gpio);
                     switch(msg.mode) {
@@ -155,10 +155,10 @@ static void loop() {
             break;
             case CMD_MAC_ADDRESS: {
                 st_mac_address_message_t msg;
-                buffer_read_cursor_t read_cur = {length,(const uint8_t*)ptr};
+                buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
                 if(-1<st_mac_address_message_read(&msg,on_read_buffer,&read_cur)) {
                     puts("MAC Address requested");
-                    buffer_write_cursor_t write_cur = {INTERFACE_MAX_SIZE,msg_buffer};
+                    buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_mac_address_response_message_t resp;
                     memset(&resp,0,sizeof(resp));
                     esp_read_mac(resp.address,ESP_MAC_BASE);
