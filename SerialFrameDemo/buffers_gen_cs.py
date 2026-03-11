@@ -1011,6 +1011,55 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
     lines.append(f"    {member_vis}const int StructMaxSize = {struct_wire_size(struct_name,structs, fixed_mode=fixed_mode)};")
     lines.append("")
 
+    if not fields:
+        # Zero-field struct: no Core methods needed, emit minimal no-op public methods
+
+        # Computed instance SizeOfStruct property (only in variable-length mode)
+        if not fixed_mode:
+            lines.append(f"    {member_vis}int SizeOfStruct => 0;")
+            lines.append("")
+
+        # Public Span overloads (LE and BE) — no-op implementations
+        for big_endian in (False, True):
+            suffix = "BE" if big_endian else ""
+
+            lines.append(f"    {member_vis}static bool TryRead{suffix}(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
+            lines.append("    {")
+            lines.append(f"        result = new {cs_name}();")
+            lines.append("        bytesRead = 0;")
+            lines.append("        return true;")
+            lines.append("    }")
+            lines.append("")
+
+            lines.append(f"    {member_vis}bool TryWrite{suffix}(Span<byte> destination, out int bytesWritten)")
+            lines.append("    {")
+            lines.append("        bytesWritten = 0;")
+            lines.append("        return true;")
+            lines.append("    }")
+            lines.append("")
+
+        # Stream overloads (LE and BE) — no-op implementations
+        for big_endian in (False, True):
+            suffix = "BE" if big_endian else ""
+
+            lines.append(f"    {member_vis}static bool TryRead{suffix}(Stream stream, out {cs_name} result, out int bytesRead)")
+            lines.append("    {")
+            lines.append(f"        result = new {cs_name}();")
+            lines.append("        bytesRead = 0;")
+            lines.append("        return true;")
+            lines.append("    }")
+            lines.append("")
+
+            lines.append(f"    {member_vis}bool TryWrite{suffix}(Stream stream, out int bytesWritten)")
+            lines.append("    {")
+            lines.append("        bytesWritten = 0;")
+            lines.append("        return true;")
+            lines.append("    }")
+            lines.append("")
+
+        lines.append("}")
+        return "\n".join(lines)
+
     lines.extend(gen_field_declarations(fields, structs, member_vis))
     lines.append("")
 

@@ -412,6 +412,7 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True)
     fn = write_fn_name(prefix, struct_name)
     lines = [f"int {fn}(const {struct_name}* s, buffers_write_callback_t on_write, void* on_write_state) {{"]
     if not fields:
+        lines.append("    (void)s; (void)on_write; (void)on_write_state;")
         lines.append("    return 0;")
     else:
         lines.append("    int res;")
@@ -460,6 +461,11 @@ def gen_size_fn(prefix, struct_name, fields, all_struct_names):
     (only used in variable-length mode)."""
     fn = size_fn_name(prefix, struct_name)
     lines = [f"size_t {fn}(const {struct_name}* s) {{"]
+    if not fields:
+        lines.append("    (void)s;")
+        lines.append("    return 0;")
+        lines.append("}")
+        return "\n".join(lines)
     lines.append("    size_t size = 0;")
     for f in fields:
         if f['array_len'] is not None:
@@ -528,6 +534,7 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True):
     fn = read_fn_name(prefix, struct_name)
     lines = [f"int {fn}({struct_name}* s, buffers_read_callback_t on_read, void* on_read_state) {{"]
     if not fields:
+        lines.append("    (void)s; (void)on_read; (void)on_read_state;")
         lines.append("    return 0;")
     else:
         lines.append("    int res;")
