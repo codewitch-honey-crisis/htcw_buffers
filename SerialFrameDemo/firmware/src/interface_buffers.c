@@ -18,29 +18,33 @@ static int write_st_gpio_mode_t(st_gpio_mode_t e, buffers_write_callback_t on_wr
 }
 
 int st_esp_idf_version_message_read(st_esp_idf_version_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
+    (void)s; (void)on_read; (void)on_read_state;
     return 0;
 }
 
 int st_esp_idf_version_message_write(const st_esp_idf_version_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
+    (void)s; (void)on_write; (void)on_write_state;
     return 0;
 }
 
 size_t st_esp_idf_version_message_size(const st_esp_idf_version_message_t* s) {
-    size_t size = 0;
-    return size;
+    (void)s;
+    return 0;
 }
 
 int st_rng_message_read(st_rng_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
+    (void)s; (void)on_read; (void)on_read_state;
     return 0;
 }
 
 int st_rng_message_write(const st_rng_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
+    (void)s; (void)on_write; (void)on_write_state;
     return 0;
 }
 
 size_t st_rng_message_size(const st_rng_message_t* s) {
-    size_t size = 0;
-    return size;
+    (void)s;
+    return 0;
 }
 
 int st_gpio_get_message_read(st_gpio_get_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
@@ -108,16 +112,18 @@ size_t st_gpio_mode_message_size(const st_gpio_mode_message_t* s) {
 }
 
 int st_mac_address_message_read(st_mac_address_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
+    (void)s; (void)on_read; (void)on_read_state;
     return 0;
 }
 
 int st_mac_address_message_write(const st_mac_address_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
+    (void)s; (void)on_write; (void)on_write_state;
     return 0;
 }
 
 size_t st_mac_address_message_size(const st_mac_address_message_t* s) {
-    size_t size = 0;
-    return size;
+    (void)s;
+    return 0;
 }
 
 int st_esp_idf_version_response_message_read(st_esp_idf_version_response_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
