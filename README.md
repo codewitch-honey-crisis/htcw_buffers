@@ -237,6 +237,10 @@ Serializing works like this:
 var buffer = new byte[ExampleMaxSize.Value];
 var exMsg = new ExampleDataMessage();
 // populate exMsg with data...
+// buffer could have used exMsg.SizeOfStruct to get the 
+// wire size of the populated struct instead of the max
+// possible size of any struct. In addition StructMaxSize
+// gets the max possible wire size of a given struct
 if(exMsg.TryWrite(buffer, out _)) {
     // buffer is filled
 }
