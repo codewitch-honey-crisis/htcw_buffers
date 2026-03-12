@@ -221,6 +221,27 @@ if(-1<example_data_message_write(&msg,on_write_buffer,&write_cur)) {
     // The first 32 bytes of buffer is filled with the message
 }
 ```
+The C# API is exposed slightly differently, in a way that is more dotnet-styled.
+
+For example from above, deserialization in C# is like this:
+```cs
+byte buffer = new byte[ExampleMaxSize.Value];
+// at some point populate buffer above with data...
+if(ExampleDataMessage.TryRead(buffer,out var exMsg, out _)) 
+{
+    // exMsg is filled
+}
+```
+Serializing works like this:
+```cs
+byte buffer = new byte[ExampleMaxSize.Value];
+var exMsg = new ExampleDataMessage();
+// populate exMsg with data...
+if(exMsg.TryWrite(buffer, out _)) {
+    // buffer is filled
+}
+```
+Note that these serialization methods work with spans, byte arrays, or streams.
 
 ## The SerialFrameDemo example
 
