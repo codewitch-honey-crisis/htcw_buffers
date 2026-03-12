@@ -225,7 +225,7 @@ The C# API is exposed slightly differently, in a way that is more dotnet-styled.
 
 For example from above, deserialization in C# is like this:
 ```cs
-byte buffer = new byte[ExampleMaxSize.Value];
+var buffer = new byte[ExampleMaxSize.Value];
 // at some point populate buffer above with data...
 if(ExampleDataMessage.TryRead(buffer,out var exMsg, out _)) 
 {
