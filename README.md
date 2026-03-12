@@ -234,7 +234,7 @@ if(ExampleDataMessage.TryRead(buffer,out var exMsg, out _))
 ```
 Serializing works like this:
 ```cs
-byte buffer = new byte[ExampleMaxSize.Value];
+var buffer = new byte[ExampleMaxSize.Value];
 var exMsg = new ExampleDataMessage();
 // populate exMsg with data...
 if(exMsg.TryWrite(buffer, out _)) {
