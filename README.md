@@ -249,7 +249,7 @@ Note that these serialization methods work with spans, byte arrays, or streams.
 
 ## The SerialFrameDemo example
 
-To buiid the app, this requires Visual Studio w/ .NET 8 installed, as well as a recent Python installed and in your PATH.
+To build the app, this requires Visual Studio w/ .NET 8 installed, as well as a recent Python installed and in your PATH.
 
 To build the firmware, this requires PlatformIO with the Espressif toolchain installed
 
