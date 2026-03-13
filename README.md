@@ -167,7 +167,7 @@ This will generate `example_buffers.h`/`.c` which will give you an API you can u
 
 For example, to serialize and deserialize `example_data_message_t` from above the following API members are provided.
 ```c
-#define EXAMPLE_DATA_MESSAGE_SIZE (32)
+#define EXAMPLE_DATA_MESSAGE_SIZE (32) // the maximum wire size of the message
 int example_data_message_read(example_data_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
 int example_data_message_write(const example_data_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
 size_t example_data_message_size(const example_data_message_t* s); // not available with --fixed
