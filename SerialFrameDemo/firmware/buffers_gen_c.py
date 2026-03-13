@@ -685,6 +685,7 @@ BUFFERS_H_CONTENT = r"""#ifndef HTCW_BUFFERS_H
 #define HTCW_BUFFERS_H
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <wchar.h>
 #include <string.h>  /* memcpy */
 #ifdef __cplusplus
