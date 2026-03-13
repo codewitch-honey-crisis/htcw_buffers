@@ -10,14 +10,13 @@
 #include "common.h"
 
 #define FRAME_HEADER_LENGTH (8 + 4 + 4)
-#define PAYLOAD_MAX 8192
-#define FRAME_TOTAL (FRAME_HEADER_LENGTH + PAYLOAD_MAX)
-#define SERIAL_QUEUE_SIZE (2 * FRAME_TOTAL)
+#define SERIAL_QUEUE_SIZE (2 * 2048)
 #define SERIAL_BUF_SIZE (2 * SERIAL_QUEUE_SIZE)
 const char* TAG = "Serial";
-static uint8_t frame_rx_data[FRAME_TOTAL];
+static uint8_t* frame_rx_data=NULL;
 static uint8_t frame_start;
 static size_t frame_start_count=0;
+static size_t max_payload_size = 0;
 static bool initialized = false;
 
 static uint8_t rx_frame_next = 0;
@@ -127,7 +126,7 @@ static bool read_frame(void) {
     size_t len = length_from_frame(frame_rx_data);
     uint32_t crc = crc_from_frame(frame_rx_data);
     uint8_t* p = frame_rx_data+FRAME_HEADER_LENGTH;
-    if(len>sizeof(frame_rx_data)-FRAME_HEADER_LENGTH) {
+    if(len>max_payload_size) {
         ESP_LOGE(TAG,"Serial corruption reading frame");
         return false;
     }
@@ -144,8 +143,14 @@ static bool read_frame(void) {
     return true;
 }
 
-bool serial_init(void) {
+bool serial_init(size_t max_payload) {
     if(initialized) return true;
+    max_payload_size = max_payload;
+    frame_rx_data = (uint8_t*)malloc(max_payload_size+FRAME_HEADER_LENGTH);
+    if(frame_rx_data==NULL) {
+        ESP_LOGE(TAG,"Out of memory");
+        goto error;
+    }
     esp_log_level_set(TAG, ESP_LOG_INFO);
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
@@ -167,6 +172,9 @@ bool serial_init(void) {
     initialized = true;
     return true;
 error:
+    if(frame_rx_data!=NULL) {
+        free(frame_rx_data);
+    }
     return false;
 }
 bool serial_try_get_frame(uint8_t* out_cmd,void** out_ptr, size_t* out_length) {

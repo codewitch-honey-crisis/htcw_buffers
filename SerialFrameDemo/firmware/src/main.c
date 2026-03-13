@@ -23,7 +23,7 @@ static void loop_task(void* arg) {
     }
 }
 void app_main() {
-    serial_init();
+    serial_init(INTERFACE_MAX_SIZE);
     TaskHandle_t loop_handle;
     xTaskCreate(loop_task,"loop_task",8192,NULL,1,&loop_handle);
 }
