@@ -19,7 +19,7 @@ typedef int  (*buffers_read_callback_t )(void* state);
 typedef int  (*buffers_write_callback_t)(uint8_t value, void* state);
 
 /* -------------------------------------------------------------------------
- * Read/write functions — single-byte (no byte order)
+ * Read/write functions - single-byte (no byte order)
  * ------------------------------------------------------------------------- */
 int buffers_read_uint8_t (uint8_t*  result, buffers_read_callback_t cb, void* state);
 int buffers_read_int8_t  (int8_t*   result, buffers_read_callback_t cb, void* state);
@@ -34,7 +34,7 @@ int buffers_write_unsigned_char(unsigned char value, buffers_write_callback_t cb
 int buffers_write_bool         (bool          value, buffers_write_callback_t cb, void* state);
 
 /* -------------------------------------------------------------------------
- * Read functions — little-endian (_le variants)
+ * Read functions - little-endian (_le variants)
  * ------------------------------------------------------------------------- */
 int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state);
 int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state);
@@ -57,7 +57,7 @@ int buffers_read_wchar_t_le       (wchar_t*            result, buffers_read_call
 int buffers_read_size_t_le        (size_t*             result, buffers_read_callback_t cb, void* state);
 
 /* -------------------------------------------------------------------------
- * Read functions — big-endian (_be variants)
+ * Read functions - big-endian (_be variants)
  * ------------------------------------------------------------------------- */
 int buffers_read_uint16_t_be(uint16_t* result, buffers_read_callback_t cb, void* state);
 int buffers_read_uint32_t_be(uint32_t* result, buffers_read_callback_t cb, void* state);
@@ -69,7 +69,7 @@ int buffers_read_float_be   (float*    result, buffers_read_callback_t cb, void*
 int buffers_read_double_be  (double*   result, buffers_read_callback_t cb, void* state);
 
 /* -------------------------------------------------------------------------
- * Write functions — little-endian (_le variants)
+ * Write functions - little-endian (_le variants)
  * ------------------------------------------------------------------------- */
 int buffers_write_uint16_t_le(uint16_t value, buffers_write_callback_t cb, void* state);
 int buffers_write_uint32_t_le(uint32_t value, buffers_write_callback_t cb, void* state);
@@ -92,7 +92,7 @@ int buffers_write_wchar_t_le       (wchar_t            value, buffers_write_call
 int buffers_write_size_t_le        (size_t             value, buffers_write_callback_t cb, void* state);
 
 /* -------------------------------------------------------------------------
- * Write functions — big-endian
+ * Write functions - big-endian
  * ------------------------------------------------------------------------- */
 int buffers_write_uint16_t_be(uint16_t value, buffers_write_callback_t cb, void* state);
 int buffers_write_uint32_t_be(uint32_t value, buffers_write_callback_t cb, void* state);

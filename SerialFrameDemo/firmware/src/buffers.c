@@ -19,7 +19,7 @@ static int write_byte(uint8_t v, buffers_write_callback_t cb, void* state) {
 }
 
 /* =========================================================================
- * uint8_t  (single byte — no byte order)
+ * uint8_t  (single byte - no byte order)
  * ========================================================================= */
 int buffers_read_uint8_t(uint8_t* result, buffers_read_callback_t cb, void* state) {
     return read_byte(cb, state, result);
@@ -29,7 +29,7 @@ int buffers_write_uint8_t(uint8_t value, buffers_write_callback_t cb, void* stat
 }
 
 /* =========================================================================
- * int8_t  (single byte — no byte order)
+ * int8_t  (single byte - no byte order)
  * ========================================================================= */
 int buffers_read_int8_t(int8_t* result, buffers_read_callback_t cb, void* state) {
     uint8_t tmp; int r = read_byte(cb, state, &tmp); if (r < 0) return r;
@@ -40,7 +40,7 @@ int buffers_write_int8_t(int8_t value, buffers_write_callback_t cb, void* state)
 }
 
 /* =========================================================================
- * uint16_t  — little-endian: low byte first
+ * uint16_t  - little-endian: low byte first
  * ========================================================================= */
 int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state) {
     uint8_t lo, hi; int r;
