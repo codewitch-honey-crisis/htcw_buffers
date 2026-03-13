@@ -1,4 +1,4 @@
-#include "serial.hpp"
+#include "serial.h"
 
 #include <driver/gpio.h>
 #include <driver/uart.h>
@@ -21,7 +21,7 @@ static size_t frame_start_count=0;
 static bool initialized = false;
 
 static uint8_t rx_frame_next = 0;
-static uint32_t crc32(const uint8_t* data, size_t length, uint32_t seed = UINT32_MAX / 3) {
+static uint32_t crc32(const uint8_t* data, size_t length, uint32_t seed) {
     uint32_t result = seed;
     while (length--) {
         result ^= *data++;
@@ -50,7 +50,7 @@ static void write_frame_crc(uint32_t crc,uint8_t* ptr) {
 static void write_frame_header(uint8_t cmd, void* frame, size_t length, uint8_t* ptr) {
     write_frame_marker(cmd,ptr);
     write_frame_length(length,ptr);
-    write_frame_crc(crc32((const uint8_t*)frame,length),ptr);
+    write_frame_crc(crc32((const uint8_t*)frame,length,UINT32_MAX / 3),ptr);
 }
 
 static int8_t cmd_from_frame(const uint8_t* frame) {
@@ -65,7 +65,7 @@ static size_t crc_from_frame(const uint8_t* frame) {
     uint32_t* result = (uint32_t*)(frame+12);
     return (size_t)*result;
 }
-static bool read_frame_marker() {
+static bool read_frame_marker(void) {
     int length = 0;
     if(ESP_OK!=uart_get_buffered_data_len(UART_NUM_0, (size_t*)&length)) {
         return false;
@@ -105,7 +105,7 @@ static bool read_frame_marker() {
     frame_start_count = 0;
     return false;
 }
-static bool read_frame_header() {
+static bool read_frame_header(void) {
     if(!read_frame_marker()) {
         return false;
     }
@@ -119,7 +119,7 @@ static bool read_frame_header() {
    
     return true;
 }
-static bool read_frame() {
+static bool read_frame(void) {
     if(!read_frame_header()) {
         return false;
     }
@@ -137,14 +137,14 @@ static bool read_frame() {
         return false;
     }
 
-    if(crc!=crc32(frame_rx_data+FRAME_HEADER_LENGTH,len)) {
+    if(crc!=crc32(frame_rx_data+FRAME_HEADER_LENGTH,len,UINT32_MAX / 3)) {
         ESP_LOGE(TAG, "CRC32 check failed for frame");
         return false;
     }
     return true;
 }
 
-bool serial_init() {
+bool serial_init(void) {
     if(initialized) return true;
     esp_log_level_set(TAG, ESP_LOG_INFO);
     /* Configure parameters of an UART driver,
@@ -157,7 +157,7 @@ bool serial_init() {
     uart_config.stop_bits = UART_STOP_BITS_1;
     uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
     // Install UART driver, and get the queue.
-    if (ESP_OK != uart_driver_install(UART_NUM_0, SERIAL_BUF_SIZE * 2, 0, 20, nullptr, 0)) {
+    if (ESP_OK != uart_driver_install(UART_NUM_0, SERIAL_BUF_SIZE * 2, 0, 20, NULL, 0)) {
         ESP_LOGE(TAG, "Unable to install uart driver");
         goto error;
     }
@@ -211,7 +211,7 @@ bool serial_put_frame(uint8_t cmd, void* frame, size_t frame_length) {
     if(frame_length==0) return true;
     return try_write((const uint8_t*)frame,frame_length);
 }
-bool serial_discard_frame() {
+bool serial_discard_frame(void) {
     if(!initialized || rx_frame_next==0) {
         return false;
     }
@@ -219,7 +219,7 @@ bool serial_discard_frame() {
     return true;
 }
 
-bool serial_update() {
+bool serial_update(void) {
     if(!initialized) {
         return false;
     }
@@ -229,7 +229,7 @@ bool serial_update() {
 retry:
     if(read_frame()) {
         rx_frame_next = cmd_from_frame(frame_rx_data);
-        uint32_t crc = crc32(frame_rx_data+FRAME_HEADER_LENGTH,length_from_frame(frame_rx_data));
+        uint32_t crc = crc32(frame_rx_data+FRAME_HEADER_LENGTH,length_from_frame(frame_rx_data),UINT32_MAX / 3);
         if(crc!=crc_from_frame(frame_rx_data)) {
             goto retry;
         }

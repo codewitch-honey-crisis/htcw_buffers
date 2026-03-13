@@ -2,6 +2,8 @@
 #define HTCW_BUFFERS_H
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <wchar.h>
 #include <string.h>  /* memcpy */
 #ifdef __cplusplus
 extern "C" {

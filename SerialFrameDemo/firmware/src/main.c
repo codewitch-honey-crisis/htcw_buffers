@@ -8,7 +8,7 @@
 #include "driver/gpio.h"
 #include <memory.h>
 #include <stdio.h>
-#include "serial.hpp"
+#include "serial.h"
 #include "interface_buffers.h"
 static void loop();
 static void loop_task(void* arg) {
@@ -22,7 +22,7 @@ static void loop_task(void* arg) {
         loop();
     }
 }
-extern "C" void app_main() {
+void app_main() {
     serial_init();
     TaskHandle_t loop_handle;
     xTaskCreate(loop_task,"loop_task",8192,NULL,1,&loop_handle);
