@@ -12,6 +12,7 @@ internal class Program
 {
     static bool _connected = false;
     static int _gpioNum = -1;
+    static bool _waiting = false;
     static void Main(string[] args)
     {
         if (args.Length == 0) throw new ArgumentException("A serial port must be specified.");
@@ -24,7 +25,10 @@ internal class Program
         session.FrameError += Session_FrameError;
         while (_connected)
         {
-            Thread.Sleep(100);
+            while (_waiting)
+            {
+                Thread.Sleep(100);
+            }
             Console.Write(">");
             var cmd = Console.ReadLine();
             if (cmd == null)
@@ -47,6 +51,7 @@ internal class Program
                             
                             if(ver.TryWrite(buffer,out var _))
                             {
+                                _waiting = true;
                                 session.Send((byte)STMessageCommand.CmdEspIdfVersion, buffer.AsSpan(0,ver.SizeOfStruct));
                             }
                         }
@@ -57,6 +62,7 @@ internal class Program
 
                             if (rng.TryWrite(buffer, out var _))
                             {
+                                _waiting = true;
                                 session.Send((byte)STMessageCommand.CmdRng, buffer.AsSpan(0,rng.SizeOfStruct));
                             }
                         }
@@ -80,6 +86,7 @@ internal class Program
                                     gpioGet.Mask = unchecked((ulong)(1UL << b));
                                     if (gpioGet.TryWrite(buffer, out var _))
                                     {
+                                        _waiting = true;
                                         session.Send((byte)STMessageCommand.CmdGpioGet, buffer.AsSpan(0,gpioGet.SizeOfStruct));
                                     }
                                     break;
@@ -205,6 +212,7 @@ internal class Program
 
                             if (mac.TryWrite(buffer, out var _))
                             {
+                                _waiting = true;
                                 session.Send((byte)STMessageCommand.CmdMacAddress, buffer.AsSpan(0, mac.SizeOfStruct));
                             }
                         }
@@ -237,6 +245,10 @@ internal class Program
                             _connected = false;
                             session.Dispose();
                         }
+                        break;
+                    default:
+                        Console.Error.WriteLine("Unrecognized command. Type HELP or ? for available commands");
+                        Console.Error.WriteLine();
                         break;
                 }
             }
@@ -300,5 +312,6 @@ internal class Program
                 break;
         }
         Console.WriteLine();
+        _waiting = false;
     }
 }
