@@ -394,15 +394,16 @@ def gen_read_call(prefix, field, accessor, all_struct_names, indent="    ", endi
     if wt in all_struct_names:
         fn = read_fn_name(prefix, wt)
         return [f"{indent}res = {fn}(&{accessor}, on_read, on_read_state);",
-                f"{indent}if(res < 0) {{ return res; }}"]
+                f"{indent}if(res < 0) {{ return res; }}",
+                f"{indent}bytes_read += res;"]
     elif field['is_enum']:
         wt = field['type']
-        return [f"{indent}res = read_{wt}(&{accessor}, on_read, on_read_state);",
+        return [f"{indent}res = read_{wt}(&{accessor}, on_read, on_read_state, &bytes_read);",
                 f"{indent}if(res < 0) {{ return res; }}"]
     else:
         c_type = field['type']
         sfx = endian_suffix_for_type(c_type, endian_suffix)
-        return [f"{indent}res = buffers_read_{c_type}{sfx}(&{accessor}, on_read, on_read_state);",
+        return [f"{indent}res = buffers_read_{c_type}{sfx}(&{accessor}, on_read, on_read_state, &bytes_read);",
                 f"{indent}if(res < 0) {{ return res; }}"]
 
 
@@ -411,25 +412,26 @@ def gen_write_call(prefix, field, accessor, all_struct_names, indent="    ", end
     if wt in all_struct_names:
         fn = write_fn_name(prefix, wt)
         return [f"{indent}res = {fn}(&{accessor}, on_write, on_write_state);",
-                f"{indent}if(res < 0) {{ return res; }}"]
+                f"{indent}if(res < 0) {{ return res; }}",
+                f"{indent}total += res;"]
     elif field['is_enum']:
         wt = field['type']
         return [f"{indent}res = write_{wt}({accessor}, on_write, on_write_state);",
-                f"{indent}if(res < 0) {{ return res; }}"]
+                f"{indent}if(res < 0) {{ return res; }}",
+                f"{indent}total += res;"]
     else:
         c_type = field['type']
         sfx = endian_suffix_for_type(c_type, endian_suffix)
         return [f"{indent}res = buffers_write_{c_type}{sfx}({accessor}, on_write, on_write_state);",
-                f"{indent}if(res < 0) {{ return res; }}"]
+                f"{indent}if(res < 0) {{ return res; }}",
+                f"{indent}total += res;"]
 
 def gen_enum_write_fn(enum_name, wire_type, endian_suffix="_le"):
     fn = f"write_{enum_name}"
     sfx = endian_suffix_for_type(wire_type, endian_suffix)
     lines = [f"static int {fn}({enum_name} e, buffers_write_callback_t on_write, void* on_write_state) {{"]
-    lines.append("    int res;")
     lines.append(f"    {wire_type} tmp = ({wire_type})e;")
-    lines.append(f"    res = buffers_write_{wire_type}{sfx}(tmp, on_write, on_write_state);")
-    lines.append("    return res;")
+    lines.append(f"    return buffers_write_{wire_type}{sfx}(tmp, on_write, on_write_state);")
     lines.append("}")
     return "\n".join(lines)
 
@@ -441,8 +443,8 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
         lines.append("    return 0;")
     else:
         lines.append("    int res;")
+        lines.append("    int total = 0;")
         for i, f in enumerate(fields):
-            is_last = (i == len(fields) - 1)
             if f['array_len'] is not None:
                 if fixed_mode:
                     lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
@@ -455,17 +457,16 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
                     is_string = (f['type'] == 'char')
                     lines.append(f"    {{")
                     if is_string:
-                        # For strings, compute length via strlen, capped at array_len
                         lines.append(f"        {lp_type} _len_{f['name']} = 0;")
                         lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
                         lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
                         lines.append(f"            _len_{f['name']}++;")
                         lines.append(f"        }}")
                     else:
-                        # For non-string arrays, always write all elements
                         lines.append(f"        {lp_type} _len_{f['name']} = {f['array_len']};")
                     lines.append(f"        res = buffers_write_{lp_type}{endian_suffix_for_type(lp_type, endian_suffix)}(_len_{f['name']}, on_write, on_write_state);")
                     lines.append(f"        if(res < 0) {{ return res; }}")
+                    lines.append(f"        total += res;")
                     lines.append(f"        for(int i = 0; i < (int)_len_{f['name']}; ++i) {{")
                     stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="            ", endian_suffix=endian_suffix)
                     lines.extend(stmts)
@@ -473,10 +474,8 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
                     lines.append(f"    }}")
             else:
                 stmts = gen_write_call(prefix, f, f"s->{f['name']}", all_struct_names, endian_suffix=endian_suffix)
-                lines.append(stmts[0])
-                if not is_last:
-                    lines.append(stmts[1])
-        lines.append("    return res;")
+                lines.extend(stmts)
+        lines.append("    return total;")
     lines.append("}")
     return "\n".join(lines)
 
@@ -546,13 +545,12 @@ def gen_size_fn(prefix, struct_name, fields, all_struct_names):
 def gen_enum_read_fn(enum_name, wire_type, endian_suffix="_le"):
     fn = f"read_{enum_name}"
     sfx = endian_suffix_for_type(wire_type, endian_suffix)
-    lines = [f"static int {fn}({enum_name}* e, buffers_read_callback_t on_read, void* on_read_state) {{"]
-    lines.append("    int res;")
+    lines = [f"static int {fn}({enum_name}* e, buffers_read_callback_t on_read, void* on_read_state, int* bytes_read) {{"]
     lines.append(f"    {wire_type} tmp;")
-    lines.append(f"    res = buffers_read_{wire_type}{sfx}(&tmp, on_read, on_read_state);")
+    lines.append(f"    int res = buffers_read_{wire_type}{sfx}(&tmp, on_read, on_read_state, bytes_read);")
     lines.append("    if(res < 0) { return res; }")
     lines.append(f"    *e = ({enum_name})tmp;")
-    lines.append("    return res;")
+    lines.append("    return 0;")
     lines.append("}")
     return "\n".join(lines)
 
@@ -564,8 +562,8 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
         lines.append("    return 0;")
     else:
         lines.append("    int res;")
+        lines.append("    int bytes_read = 0;")
         for i, f in enumerate(fields):
-            is_last = (i == len(fields) - 1)
             if f['array_len'] is not None:
                 if fixed_mode:
                     # Fixed mode: read all array_len elements
@@ -580,7 +578,7 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
                     is_string = (f['type'] == 'char')
                     lines.append(f"    {{")
                     lines.append(f"        {lp_cs} _len_{f['name']};")
-                    lines.append(f"        res = buffers_read_{lp_cs}{endian_suffix_for_type(lp_cs, endian_suffix)}(&_len_{f['name']}, on_read, on_read_state);")
+                    lines.append(f"        res = buffers_read_{lp_cs}{endian_suffix_for_type(lp_cs, endian_suffix)}(&_len_{f['name']}, on_read, on_read_state, &bytes_read);")
                     lines.append(f"        if(res < 0) {{ return res; }}")
                     lines.append(f"        if(_len_{f['name']} > {f['array_len']}) {{ return BUFFERS_ERROR_EOF; }}")
                     lines.append(f"        for(int i = 0; i < (int)_len_{f['name']}; ++i) {{")
@@ -602,10 +600,8 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
                     lines.append(f"    }}")
             else:
                 stmts = gen_read_call(prefix, f, f"s->{f['name']}", all_struct_names, endian_suffix=endian_suffix)
-                lines.append(stmts[0])
-                if not is_last:
-                    lines.append(stmts[1])
-        lines.append("    return res;")
+                lines.extend(stmts)
+        lines.append("    return bytes_read;")
     lines.append("}")
     return "\n".join(lines)
 
@@ -704,14 +700,14 @@ typedef int  (*buffers_write_callback_t)(uint8_t value, void* state);
 /* -------------------------------------------------------------------------
  * Read/write functions - single-byte (no byte order)
  * ------------------------------------------------------------------------- */
-int buffers_read_uint8_t (uint8_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_int8_t  (int8_t*   result, buffers_read_callback_t cb, void* state);
+int buffers_read_uint8_t (uint8_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int8_t  (int8_t*   result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_write_uint8_t(uint8_t   value,  buffers_write_callback_t cb, void* state);
 int buffers_write_int8_t (int8_t    value,  buffers_write_callback_t cb, void* state);
 /* single-byte aliases */
-int buffers_read_char         (char*          result, buffers_read_callback_t cb, void* state);
-int buffers_read_unsigned_char(unsigned char* result, buffers_read_callback_t cb, void* state);
-int buffers_read_bool         (bool*          result, buffers_read_callback_t cb, void* state);
+int buffers_read_char         (char*          result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_char(unsigned char* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_bool         (bool*          result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_write_char         (char          value, buffers_write_callback_t cb, void* state);
 int buffers_write_unsigned_char(unsigned char value, buffers_write_callback_t cb, void* state);
 int buffers_write_bool         (bool          value, buffers_write_callback_t cb, void* state);
@@ -719,37 +715,37 @@ int buffers_write_bool         (bool          value, buffers_write_callback_t cb
 /* -------------------------------------------------------------------------
  * Read functions - little-endian (_le variants)
  * ------------------------------------------------------------------------- */
-int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_uint64_t_le(uint64_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_int16_t_le (int16_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_int32_t_le (int32_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_int64_t_le (int64_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_float_le   (float*    result, buffers_read_callback_t cb, void* state);
-int buffers_read_double_le  (double*   result, buffers_read_callback_t cb, void* state);
+int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_uint64_t_le(uint64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int16_t_le (int16_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int32_t_le (int32_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int64_t_le (int64_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_float_le   (float*    result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_double_le  (double*   result, buffers_read_callback_t cb, void* state, int* bytes_read);
 /* aliases */
-int buffers_read_short_le         (short*              result, buffers_read_callback_t cb, void* state);
-int buffers_read_unsigned_short_le(unsigned short*     result, buffers_read_callback_t cb, void* state);
-int buffers_read_int_le           (int*                result, buffers_read_callback_t cb, void* state);
-int buffers_read_unsigned_int_le  (unsigned int*       result, buffers_read_callback_t cb, void* state);
-int buffers_read_long_le          (long*               result, buffers_read_callback_t cb, void* state);
-int buffers_read_unsigned_long_le (unsigned long*      result, buffers_read_callback_t cb, void* state);
-int buffers_read_long_long_le         (long long*          result, buffers_read_callback_t cb, void* state);
-int buffers_read_unsigned_long_long_le(unsigned long long* result, buffers_read_callback_t cb, void* state);
-int buffers_read_wchar_t_le       (wchar_t*            result, buffers_read_callback_t cb, void* state);
-int buffers_read_size_t_le        (size_t*             result, buffers_read_callback_t cb, void* state);
+int buffers_read_short_le         (short*              result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_short_le(unsigned short*     result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int_le           (int*                result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_int_le  (unsigned int*       result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_le          (long*               result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_le (unsigned long*      result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_long_le         (long long*          result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_long_le(unsigned long long* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_wchar_t_le       (wchar_t*            result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_size_t_le        (size_t*             result, buffers_read_callback_t cb, void* state, int* bytes_read);
 
 /* -------------------------------------------------------------------------
  * Read functions - big-endian (_be variants)
  * ------------------------------------------------------------------------- */
-int buffers_read_uint16_t_be(uint16_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_uint32_t_be(uint32_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_uint64_t_be(uint64_t* result, buffers_read_callback_t cb, void* state);
-int buffers_read_int16_t_be (int16_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_int32_t_be (int32_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_int64_t_be (int64_t*  result, buffers_read_callback_t cb, void* state);
-int buffers_read_float_be   (float*    result, buffers_read_callback_t cb, void* state);
-int buffers_read_double_be  (double*   result, buffers_read_callback_t cb, void* state);
+int buffers_read_uint16_t_be(uint16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_uint32_t_be(uint32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_uint64_t_be(uint64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int16_t_be (int16_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int32_t_be (int32_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int64_t_be (int64_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_float_be   (float*    result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_double_be  (double*   result, buffers_read_callback_t cb, void* state, int* bytes_read);
 
 /* -------------------------------------------------------------------------
  * Write functions - little-endian (_le variants)
@@ -798,25 +794,26 @@ BUFFERS_C_CONTENT = r"""#include "buffers.h"
  * Internal helpers
  * ========================================================================= */
 
-static int read_byte(buffers_read_callback_t cb, void* state, uint8_t* out) {
+static int read_byte(buffers_read_callback_t cb, void* state, uint8_t* out, int* bytes_read) {
     int b = cb(state);
     if (b == -1) return BUFFERS_ERROR_EOF;
     if (b  <  0) return b;
     *out = (uint8_t)b;
+    if (bytes_read) ++(*bytes_read);
     return 0;
 }
 
 static int write_byte(uint8_t v, buffers_write_callback_t cb, void* state) {
     int r = cb(v, state);
     if (r < 0) return r;
-    return 0;
+    return 1;
 }
 
 /* =========================================================================
  * uint8_t  (single byte - no byte order)
  * ========================================================================= */
-int buffers_read_uint8_t(uint8_t* result, buffers_read_callback_t cb, void* state) {
-    return read_byte(cb, state, result);
+int buffers_read_uint8_t(uint8_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    return read_byte(cb, state, result, bytes_read);
 }
 int buffers_write_uint8_t(uint8_t value, buffers_write_callback_t cb, void* state) {
     return write_byte(value, cb, state);
@@ -825,8 +822,8 @@ int buffers_write_uint8_t(uint8_t value, buffers_write_callback_t cb, void* stat
 /* =========================================================================
  * int8_t  (single byte - no byte order)
  * ========================================================================= */
-int buffers_read_int8_t(int8_t* result, buffers_read_callback_t cb, void* state) {
-    uint8_t tmp; int r = read_byte(cb, state, &tmp); if (r < 0) return r;
+int buffers_read_int8_t(int8_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint8_t tmp; int r = read_byte(cb, state, &tmp, bytes_read); if (r < 0) return r;
     *result = (int8_t)tmp; return 0;
 }
 int buffers_write_int8_t(int8_t value, buffers_write_callback_t cb, void* state) {
@@ -836,47 +833,47 @@ int buffers_write_int8_t(int8_t value, buffers_write_callback_t cb, void* state)
 /* =========================================================================
  * uint16_t  - little-endian: low byte first
  * ========================================================================= */
-int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint8_t lo, hi; int r;
-    r = read_byte(cb, state, &lo); if (r < 0) return r;
-    r = read_byte(cb, state, &hi); if (r < 0) return r;
+    r = read_byte(cb, state, &lo, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &hi, bytes_read); if (r < 0) return r;
     *result = (uint16_t)((hi << 8) | lo);
     return 0;
 }
 int buffers_write_uint16_t_le(uint16_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >> 8 ), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >> 8 ), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
 
 /* big-endian */
-int buffers_read_uint16_t_be(uint16_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint16_t_be(uint16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint8_t hi, lo; int r;
-    r = read_byte(cb, state, &hi); if (r < 0) return r;
-    r = read_byte(cb, state, &lo); if (r < 0) return r;
+    r = read_byte(cb, state, &hi, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &lo, bytes_read); if (r < 0) return r;
     *result = (uint16_t)((hi << 8) | lo);
     return 0;
 }
 int buffers_write_uint16_t_be(uint16_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = write_byte((uint8_t)(value >> 8), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value     ), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = write_byte((uint8_t)(value >> 8), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value     ), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
 
 /* =========================================================================
  * int16_t
  * ========================================================================= */
-int buffers_read_int16_t_le(int16_t* result, buffers_read_callback_t cb, void* state) {
-    uint16_t tmp; int r = buffers_read_uint16_t_le(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int16_t_le(int16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint16_t tmp; int r = buffers_read_uint16_t_le(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int16_t)tmp; return 0;
 }
 int buffers_write_int16_t_le(int16_t value, buffers_write_callback_t cb, void* state) {
     return buffers_write_uint16_t_le((uint16_t)value, cb, state);
 }
-int buffers_read_int16_t_be(int16_t* result, buffers_read_callback_t cb, void* state) {
-    uint16_t tmp; int r = buffers_read_uint16_t_be(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int16_t_be(int16_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint16_t tmp; int r = buffers_read_uint16_t_be(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int16_t)tmp; return 0;
 }
 int buffers_write_int16_t_be(int16_t value, buffers_write_callback_t cb, void* state) {
@@ -886,55 +883,55 @@ int buffers_write_int16_t_be(int16_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * uint32_t
  * ========================================================================= */
-int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint8_t b0, b1, b2, b3; int r;
-    r = read_byte(cb, state, &b0); if (r < 0) return r;
-    r = read_byte(cb, state, &b1); if (r < 0) return r;
-    r = read_byte(cb, state, &b2); if (r < 0) return r;
-    r = read_byte(cb, state, &b3); if (r < 0) return r;
+    r = read_byte(cb, state, &b0, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b1, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b2, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b3, bytes_read); if (r < 0) return r;
     *result = ((uint32_t)b3 << 24) | ((uint32_t)b2 << 16) |
               ((uint32_t)b1 <<  8) |  (uint32_t)b0;
     return 0;
 }
 int buffers_write_uint32_t_le(uint32_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >>  8), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >> 16), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >> 24), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >>  8), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >> 16), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >> 24), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
-int buffers_read_uint32_t_be(uint32_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint32_t_be(uint32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint8_t b0, b1, b2, b3; int r;
-    r = read_byte(cb, state, &b0); if (r < 0) return r;
-    r = read_byte(cb, state, &b1); if (r < 0) return r;
-    r = read_byte(cb, state, &b2); if (r < 0) return r;
-    r = read_byte(cb, state, &b3); if (r < 0) return r;
+    r = read_byte(cb, state, &b0, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b1, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b2, bytes_read); if (r < 0) return r;
+    r = read_byte(cb, state, &b3, bytes_read); if (r < 0) return r;
     *result = ((uint32_t)b0 << 24) | ((uint32_t)b1 << 16) |
               ((uint32_t)b2 <<  8) |  (uint32_t)b3;
     return 0;
 }
 int buffers_write_uint32_t_be(uint32_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = write_byte((uint8_t)(value >> 24), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >> 16), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value >>  8), cb, state); if (r < 0) return r;
-    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = write_byte((uint8_t)(value >> 24), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >> 16), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value >>  8), cb, state); if (r < 0) return r; total += r;
+    r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
 
 /* =========================================================================
  * int32_t
  * ========================================================================= */
-int buffers_read_int32_t_le(int32_t* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int32_t_le(int32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int32_t)tmp; return 0;
 }
 int buffers_write_int32_t_le(int32_t value, buffers_write_callback_t cb, void* state) {
     return buffers_write_uint32_t_le((uint32_t)value, cb, state);
 }
-int buffers_read_int32_t_be(int32_t* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int32_t_be(int32_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int32_t)tmp; return 0;
 }
 int buffers_write_int32_t_be(int32_t value, buffers_write_callback_t cb, void* state) {
@@ -944,45 +941,45 @@ int buffers_write_int32_t_be(int32_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * uint64_t
  * ========================================================================= */
-int buffers_read_uint64_t_le(uint64_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint64_t_le(uint64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint32_t lo, hi; int r;
-    r = buffers_read_uint32_t_le(&lo, cb, state); if (r < 0) return r;
-    r = buffers_read_uint32_t_le(&hi, cb, state); if (r < 0) return r;
+    r = buffers_read_uint32_t_le(&lo, cb, state, bytes_read); if (r < 0) return r;
+    r = buffers_read_uint32_t_le(&hi, cb, state, bytes_read); if (r < 0) return r;
     *result = ((uint64_t)hi << 32) | lo;
     return 0;
 }
 int buffers_write_uint64_t_le(uint64_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = buffers_write_uint32_t_le((uint32_t)(value      ), cb, state); if (r < 0) return r;
-    r = buffers_write_uint32_t_le((uint32_t)(value >> 32), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = buffers_write_uint32_t_le((uint32_t)(value      ), cb, state); if (r < 0) return r; total += r;
+    r = buffers_write_uint32_t_le((uint32_t)(value >> 32), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
-int buffers_read_uint64_t_be(uint64_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint64_t_be(uint64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
     uint32_t hi, lo; int r;
-    r = buffers_read_uint32_t_be(&hi, cb, state); if (r < 0) return r;
-    r = buffers_read_uint32_t_be(&lo, cb, state); if (r < 0) return r;
+    r = buffers_read_uint32_t_be(&hi, cb, state, bytes_read); if (r < 0) return r;
+    r = buffers_read_uint32_t_be(&lo, cb, state, bytes_read); if (r < 0) return r;
     *result = ((uint64_t)hi << 32) | lo;
     return 0;
 }
 int buffers_write_uint64_t_be(uint64_t value, buffers_write_callback_t cb, void* state) {
-    int r;
-    r = buffers_write_uint32_t_be((uint32_t)(value >> 32), cb, state); if (r < 0) return r;
-    r = buffers_write_uint32_t_be((uint32_t)(value      ), cb, state); if (r < 0) return r;
-    return 0;
+    int r, total = 0;
+    r = buffers_write_uint32_t_be((uint32_t)(value >> 32), cb, state); if (r < 0) return r; total += r;
+    r = buffers_write_uint32_t_be((uint32_t)(value      ), cb, state); if (r < 0) return r; total += r;
+    return total;
 }
 
 /* =========================================================================
  * int64_t
  * ========================================================================= */
-int buffers_read_int64_t_le(int64_t* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int64_t_le(int64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int64_t)tmp; return 0;
 }
 int buffers_write_int64_t_le(int64_t value, buffers_write_callback_t cb, void* state) {
     return buffers_write_uint64_t_le((uint64_t)value, cb, state);
 }
-int buffers_read_int64_t_be(int64_t* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int64_t_be(int64_t* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state, bytes_read); if (r < 0) return r;
     *result = (int64_t)tmp; return 0;
 }
 int buffers_write_int64_t_be(int64_t value, buffers_write_callback_t cb, void* state) {
@@ -992,16 +989,16 @@ int buffers_write_int64_t_be(int64_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * float  (IEEE 754, reinterpreted as uint32_t)
  * ========================================================================= */
-int buffers_read_float_le(float* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_float_le(float* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state, bytes_read); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(float)); return 0;
 }
 int buffers_write_float_le(float value, buffers_write_callback_t cb, void* state) {
     uint32_t tmp; memcpy(&tmp, &value, sizeof(float));
     return buffers_write_uint32_t_le(tmp, cb, state);
 }
-int buffers_read_float_be(float* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_float_be(float* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state, bytes_read); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(float)); return 0;
 }
 int buffers_write_float_be(float value, buffers_write_callback_t cb, void* state) {
@@ -1012,16 +1009,16 @@ int buffers_write_float_be(float value, buffers_write_callback_t cb, void* state
 /* =========================================================================
  * double  (IEEE 754, reinterpreted as uint64_t)
  * ========================================================================= */
-int buffers_read_double_le(double* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_double_le(double* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state, bytes_read); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(double)); return 0;
 }
 int buffers_write_double_le(double value, buffers_write_callback_t cb, void* state) {
     uint64_t tmp; memcpy(&tmp, &value, sizeof(double));
     return buffers_write_uint64_t_le(tmp, cb, state);
 }
-int buffers_read_double_be(double* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_double_be(double* result, buffers_read_callback_t cb, void* state, int* bytes_read) {
+    uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state, bytes_read); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(double)); return 0;
 }
 int buffers_write_double_be(double value, buffers_write_callback_t cb, void* state) {
@@ -1033,69 +1030,69 @@ int buffers_write_double_be(double value, buffers_write_callback_t cb, void* sta
  * Alias functions (delegate to the wire-type counterpart)
  * ========================================================================= */
 
-int buffers_read_char(char* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int8_t((int8_t*)r, cb, s); }
+int buffers_read_char(char* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int8_t((int8_t*)r, cb, s, bytes_read); }
 int buffers_write_char(char v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int8_t((int8_t)v, cb, s); }
 
-int buffers_read_unsigned_char(unsigned char* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint8_t((uint8_t*)r, cb, s); }
+int buffers_read_unsigned_char(unsigned char* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint8_t((uint8_t*)r, cb, s, bytes_read); }
 int buffers_write_unsigned_char(unsigned char v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint8_t((uint8_t)v, cb, s); }
 
-int buffers_read_short_le(short* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int16_t_le((int16_t*)r, cb, s); }
+int buffers_read_short_le(short* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int16_t_le((int16_t*)r, cb, s, bytes_read); }
 int buffers_write_short_le(short v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int16_t_le((int16_t)v, cb, s); }
 
-int buffers_read_unsigned_short_le(unsigned short* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint16_t_le((uint16_t*)r, cb, s); }
+int buffers_read_unsigned_short_le(unsigned short* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint16_t_le((uint16_t*)r, cb, s, bytes_read); }
 int buffers_write_unsigned_short_le(unsigned short v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint16_t_le((uint16_t)v, cb, s); }
 
-int buffers_read_int_le(int* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int32_t_le((int32_t*)r, cb, s); }
+int buffers_read_int_le(int* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int32_t_le((int32_t*)r, cb, s, bytes_read); }
 int buffers_write_int_le(int v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int32_t_le((int32_t)v, cb, s); }
 
-int buffers_read_unsigned_int_le(unsigned int* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint32_t_le((uint32_t*)r, cb, s); }
+int buffers_read_unsigned_int_le(unsigned int* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint32_t_le((uint32_t*)r, cb, s, bytes_read); }
 int buffers_write_unsigned_int_le(unsigned int v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint32_t_le((uint32_t)v, cb, s); }
 
-int buffers_read_long_le(long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int32_t_le((int32_t*)r, cb, s); }
+int buffers_read_long_le(long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int32_t_le((int32_t*)r, cb, s, bytes_read); }
 int buffers_write_long_le(long v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int32_t_le((int32_t)v, cb, s); }
 
-int buffers_read_unsigned_long_le(unsigned long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint32_t_le((uint32_t*)r, cb, s); }
+int buffers_read_unsigned_long_le(unsigned long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint32_t_le((uint32_t*)r, cb, s, bytes_read); }
 int buffers_write_unsigned_long_le(unsigned long v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint32_t_le((uint32_t)v, cb, s); }
 
-int buffers_read_long_long_le(long long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int64_t_le((int64_t*)r, cb, s); }
+int buffers_read_long_long_le(long long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int64_t_le((int64_t*)r, cb, s, bytes_read); }
 int buffers_write_long_long_le(long long v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int64_t_le((int64_t)v, cb, s); }
 
-int buffers_read_unsigned_long_long_le(unsigned long long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint64_t_le((uint64_t*)r, cb, s); }
+int buffers_read_unsigned_long_long_le(unsigned long long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint64_t_le((uint64_t*)r, cb, s, bytes_read); }
 int buffers_write_unsigned_long_long_le(unsigned long long v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint64_t_le((uint64_t)v, cb, s); }
 
-int buffers_read_bool(bool* r, buffers_read_callback_t cb, void* s) {
-    uint8_t tmp; int res = buffers_read_uint8_t(&tmp, cb, s); if (res < 0) return res;
+int buffers_read_bool(bool* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    uint8_t tmp; int res = buffers_read_uint8_t(&tmp, cb, s, bytes_read); if (res < 0) return res;
     *r = tmp ? 1 : 0; return 0; }
 int buffers_write_bool(bool v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint8_t(v ? 1 : 0, cb, s); }
 
-int buffers_read_wchar_t_le(wchar_t* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int16_t_le((int16_t*)r, cb, s); }
+int buffers_read_wchar_t_le(wchar_t* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int16_t_le((int16_t*)r, cb, s, bytes_read); }
 int buffers_write_wchar_t_le(wchar_t v, buffers_write_callback_t cb, void* s) {
     return buffers_write_int16_t_le((int16_t)v, cb, s); }
 
-int buffers_read_size_t_le(size_t* r, buffers_read_callback_t cb, void* s) {
-    uint32_t tmp; int res = buffers_read_uint32_t_le(&tmp, cb, s); if (res < 0) return res;
+int buffers_read_size_t_le(size_t* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    uint32_t tmp; int res = buffers_read_uint32_t_le(&tmp, cb, s, bytes_read); if (res < 0) return res;
     *r = (size_t)tmp; return 0; }
 int buffers_write_size_t_le(size_t v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint32_t_le((uint32_t)v, cb, s); }

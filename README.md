@@ -172,6 +172,7 @@ int example_data_message_read(example_data_message_t* s, buffers_read_callback_t
 int example_data_message_write(const example_data_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
 size_t example_data_message_size(const example_data_message_t* s); // not available with --fixed
 ```
+On return the read and write functions return a non-negative number indicating the bytes read or written, and a negative number on error.
 
 To read and write, you need to provide callbacks that support a streaming cursor. This is simple enough, for example over an array/buffer using the following code:
 ```c

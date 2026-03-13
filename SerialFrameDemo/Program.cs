@@ -38,6 +38,7 @@ internal class Program
             cmd = cmd.ToUpperInvariant();
             byte b;
             var sa = cmd.Split(' ');
+            int bytesWritten;
             if (sa.Length > 0)
             {
                 switch(sa[0])
@@ -49,10 +50,10 @@ internal class Program
                         {
                             STEspIdfVersionMessage ver = new STEspIdfVersionMessage();
                             
-                            if(ver.TryWrite(buffer,out var _))
+                            if(ver.TryWrite(buffer,out bytesWritten))
                             {
                                 _waiting = true;
-                                session.Send((byte)STMessageCommand.CmdEspIdfVersion, buffer.AsSpan(0,ver.SizeOfStruct));
+                                session.Send((byte)STMessageCommand.CmdEspIdfVersion, buffer.AsSpan(0,bytesWritten));
                             }
                         }
                         break;
@@ -60,10 +61,10 @@ internal class Program
                         {
                             STRngMessage rng = new STRngMessage();
 
-                            if (rng.TryWrite(buffer, out var _))
+                            if (rng.TryWrite(buffer, out bytesWritten))
                             {
                                 _waiting = true;
-                                session.Send((byte)STMessageCommand.CmdRng, buffer.AsSpan(0,rng.SizeOfStruct));
+                                session.Send((byte)STMessageCommand.CmdRng, buffer.AsSpan(0,bytesWritten));
                             }
                         }
                         break;
@@ -84,10 +85,10 @@ internal class Program
                                     _gpioNum = b;
                                     var gpioGet = new STGpioGetMessage();
                                     gpioGet.Mask = unchecked((ulong)(1UL << b));
-                                    if (gpioGet.TryWrite(buffer, out var _))
+                                    if (gpioGet.TryWrite(buffer, out bytesWritten))
                                     {
                                         _waiting = true;
-                                        session.Send((byte)STMessageCommand.CmdGpioGet, buffer.AsSpan(0,gpioGet.SizeOfStruct));
+                                        session.Send((byte)STMessageCommand.CmdGpioGet, buffer.AsSpan(0,bytesWritten));
                                     }
                                     break;
                                 case 3:
@@ -125,9 +126,9 @@ internal class Program
                                             {
                                                 gpioSet.Values = unchecked((ulong)(1UL << b));
                                             }
-                                            if (gpioSet.TryWrite(buffer, out var _))
+                                            if (gpioSet.TryWrite(buffer, out bytesWritten))
                                             {
-                                                session.Send((byte)STMessageCommand.CmdGpioSet, buffer.AsSpan(0,gpioSet.SizeOfStruct));
+                                                session.Send((byte)STMessageCommand.CmdGpioSet, buffer.AsSpan(0,bytesWritten));
                                             }
                                         }
                                         else
@@ -136,9 +137,9 @@ internal class Program
                                             gpioMode.Gpio = b;
                                             Debug.WriteLine($"Gpio mode set for {b}");
                                             gpioMode.Mode = modeKind;
-                                            if (gpioMode.TryWrite(buffer, out var _))
+                                            if (gpioMode.TryWrite(buffer, out bytesWritten))
                                             {
-                                                session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0, gpioMode.SizeOfStruct));
+                                                session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0, bytesWritten));
                                             }
                                         }
                                     }
@@ -193,9 +194,9 @@ internal class Program
                                         var gpioMode = new STGpioModeMessage();
                                         gpioMode.Gpio = b;
                                         gpioMode.Mode = modeKind;
-                                        if (gpioMode.TryWrite(buffer, out var _))
+                                        if (gpioMode.TryWrite(buffer, out bytesWritten))
                                         {
-                                            session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0,gpioMode.SizeOfStruct));
+                                            session.Send((byte)STMessageCommand.CmdGpioMode, buffer.AsSpan(0,bytesWritten));
                                         }
 
                                     }
@@ -210,10 +211,10 @@ internal class Program
                         {
                             STMacAddressMessage mac = new STMacAddressMessage();
 
-                            if (mac.TryWrite(buffer, out var _))
+                            if (mac.TryWrite(buffer, out bytesWritten))
                             {
                                 _waiting = true;
-                                session.Send((byte)STMessageCommand.CmdMacAddress, buffer.AsSpan(0, mac.SizeOfStruct));
+                                session.Send((byte)STMessageCommand.CmdMacAddress, buffer.AsSpan(0, bytesWritten));
                             }
                         }
                         break;

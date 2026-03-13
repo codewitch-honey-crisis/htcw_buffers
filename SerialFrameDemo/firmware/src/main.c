@@ -72,8 +72,8 @@ static void loop() {
                     resp.major = ESP_IDF_VERSION_MAJOR;
                     resp.minor = ESP_IDF_VERSION_MINOR;
                     resp.patch = ESP_IDF_VERSION_PATCH;
-                    st_esp_idf_version_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,st_esp_idf_version_response_message_size(&resp));
+                    int count = st_esp_idf_version_response_message_write(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -85,8 +85,8 @@ static void loop() {
                     buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_rng_response_message_t resp;
                     resp.value = esp_random();
-                    st_rng_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,st_rng_response_message_size(&resp));
+                    int count = st_rng_response_message_write(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -106,8 +106,8 @@ static void loop() {
                     buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_gpio_get_response_message_t resp;
                     resp.values = result;
-                    st_gpio_get_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,st_gpio_get_response_message_size(&resp));
+                    int count = st_gpio_get_response_message_write(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -162,8 +162,8 @@ static void loop() {
                     st_mac_address_response_message_t resp;
                     memset(&resp,0,sizeof(resp));
                     esp_read_mac(resp.address,ESP_MAC_BASE);
-                    st_mac_address_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,st_mac_address_response_message_size(&resp));
+                    int count = st_mac_address_response_message_write(&resp,on_write_buffer,&write_cur);
+                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,count);
                 }
             }
             break;
