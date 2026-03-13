@@ -251,6 +251,8 @@ Note that these serialization methods work with spans, byte arrays, or streams.
 
 ## The SerialFrameDemo example
 
+![Demo](https://github.com/codewitch-honey-crisis/htcw_buffers/blob/9a5458748cf929c11df9b00d5e2e1a6b178488c7/SerialFrameDemo.jpg)
+
 To build the app, this requires Visual Studio w/ .NET 8 installed, as well as a recent Python installed and in your PATH.
 
 To build the firmware, this requires PlatformIO with the Espressif toolchain installed
