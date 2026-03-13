@@ -313,5 +313,6 @@ internal class Program
         }
         Console.WriteLine();
         _waiting = false;
+        Thread.MemoryBarrier();
     }
 }
