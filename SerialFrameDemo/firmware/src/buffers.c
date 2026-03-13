@@ -19,7 +19,7 @@ static int write_byte(uint8_t v, buffers_write_callback_t cb, void* state) {
 }
 
 /* =========================================================================
- * uint8_t
+ * uint8_t  (single byte — no byte order)
  * ========================================================================= */
 int buffers_read_uint8_t(uint8_t* result, buffers_read_callback_t cb, void* state) {
     return read_byte(cb, state, result);
@@ -29,7 +29,7 @@ int buffers_write_uint8_t(uint8_t value, buffers_write_callback_t cb, void* stat
 }
 
 /* =========================================================================
- * int8_t
+ * int8_t  (single byte — no byte order)
  * ========================================================================= */
 int buffers_read_int8_t(int8_t* result, buffers_read_callback_t cb, void* state) {
     uint8_t tmp; int r = read_byte(cb, state, &tmp); if (r < 0) return r;
@@ -42,14 +42,14 @@ int buffers_write_int8_t(int8_t value, buffers_write_callback_t cb, void* state)
 /* =========================================================================
  * uint16_t  — little-endian: low byte first
  * ========================================================================= */
-int buffers_read_uint16_t(uint16_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint16_t_le(uint16_t* result, buffers_read_callback_t cb, void* state) {
     uint8_t lo, hi; int r;
     r = read_byte(cb, state, &lo); if (r < 0) return r;
     r = read_byte(cb, state, &hi); if (r < 0) return r;
     *result = (uint16_t)((hi << 8) | lo);
     return 0;
 }
-int buffers_write_uint16_t(uint16_t value, buffers_write_callback_t cb, void* state) {
+int buffers_write_uint16_t_le(uint16_t value, buffers_write_callback_t cb, void* state) {
     int r;
     r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r;
     r = write_byte((uint8_t)(value >> 8 ), cb, state); if (r < 0) return r;
@@ -74,12 +74,12 @@ int buffers_write_uint16_t_be(uint16_t value, buffers_write_callback_t cb, void*
 /* =========================================================================
  * int16_t
  * ========================================================================= */
-int buffers_read_int16_t(int16_t* result, buffers_read_callback_t cb, void* state) {
-    uint16_t tmp; int r = buffers_read_uint16_t(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int16_t_le(int16_t* result, buffers_read_callback_t cb, void* state) {
+    uint16_t tmp; int r = buffers_read_uint16_t_le(&tmp, cb, state); if (r < 0) return r;
     *result = (int16_t)tmp; return 0;
 }
-int buffers_write_int16_t(int16_t value, buffers_write_callback_t cb, void* state) {
-    return buffers_write_uint16_t((uint16_t)value, cb, state);
+int buffers_write_int16_t_le(int16_t value, buffers_write_callback_t cb, void* state) {
+    return buffers_write_uint16_t_le((uint16_t)value, cb, state);
 }
 int buffers_read_int16_t_be(int16_t* result, buffers_read_callback_t cb, void* state) {
     uint16_t tmp; int r = buffers_read_uint16_t_be(&tmp, cb, state); if (r < 0) return r;
@@ -92,7 +92,7 @@ int buffers_write_int16_t_be(int16_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * uint32_t
  * ========================================================================= */
-int buffers_read_uint32_t(uint32_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint32_t_le(uint32_t* result, buffers_read_callback_t cb, void* state) {
     uint8_t b0, b1, b2, b3; int r;
     r = read_byte(cb, state, &b0); if (r < 0) return r;
     r = read_byte(cb, state, &b1); if (r < 0) return r;
@@ -102,7 +102,7 @@ int buffers_read_uint32_t(uint32_t* result, buffers_read_callback_t cb, void* st
               ((uint32_t)b1 <<  8) |  (uint32_t)b0;
     return 0;
 }
-int buffers_write_uint32_t(uint32_t value, buffers_write_callback_t cb, void* state) {
+int buffers_write_uint32_t_le(uint32_t value, buffers_write_callback_t cb, void* state) {
     int r;
     r = write_byte((uint8_t)(value      ), cb, state); if (r < 0) return r;
     r = write_byte((uint8_t)(value >>  8), cb, state); if (r < 0) return r;
@@ -132,12 +132,12 @@ int buffers_write_uint32_t_be(uint32_t value, buffers_write_callback_t cb, void*
 /* =========================================================================
  * int32_t
  * ========================================================================= */
-int buffers_read_int32_t(int32_t* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int32_t_le(int32_t* result, buffers_read_callback_t cb, void* state) {
+    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state); if (r < 0) return r;
     *result = (int32_t)tmp; return 0;
 }
-int buffers_write_int32_t(int32_t value, buffers_write_callback_t cb, void* state) {
-    return buffers_write_uint32_t((uint32_t)value, cb, state);
+int buffers_write_int32_t_le(int32_t value, buffers_write_callback_t cb, void* state) {
+    return buffers_write_uint32_t_le((uint32_t)value, cb, state);
 }
 int buffers_read_int32_t_be(int32_t* result, buffers_read_callback_t cb, void* state) {
     uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state); if (r < 0) return r;
@@ -150,17 +150,17 @@ int buffers_write_int32_t_be(int32_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * uint64_t
  * ========================================================================= */
-int buffers_read_uint64_t(uint64_t* result, buffers_read_callback_t cb, void* state) {
+int buffers_read_uint64_t_le(uint64_t* result, buffers_read_callback_t cb, void* state) {
     uint32_t lo, hi; int r;
-    r = buffers_read_uint32_t(&lo, cb, state); if (r < 0) return r;
-    r = buffers_read_uint32_t(&hi, cb, state); if (r < 0) return r;
+    r = buffers_read_uint32_t_le(&lo, cb, state); if (r < 0) return r;
+    r = buffers_read_uint32_t_le(&hi, cb, state); if (r < 0) return r;
     *result = ((uint64_t)hi << 32) | lo;
     return 0;
 }
-int buffers_write_uint64_t(uint64_t value, buffers_write_callback_t cb, void* state) {
+int buffers_write_uint64_t_le(uint64_t value, buffers_write_callback_t cb, void* state) {
     int r;
-    r = buffers_write_uint32_t((uint32_t)(value      ), cb, state); if (r < 0) return r;
-    r = buffers_write_uint32_t((uint32_t)(value >> 32), cb, state); if (r < 0) return r;
+    r = buffers_write_uint32_t_le((uint32_t)(value      ), cb, state); if (r < 0) return r;
+    r = buffers_write_uint32_t_le((uint32_t)(value >> 32), cb, state); if (r < 0) return r;
     return 0;
 }
 int buffers_read_uint64_t_be(uint64_t* result, buffers_read_callback_t cb, void* state) {
@@ -180,12 +180,12 @@ int buffers_write_uint64_t_be(uint64_t value, buffers_write_callback_t cb, void*
 /* =========================================================================
  * int64_t
  * ========================================================================= */
-int buffers_read_int64_t(int64_t* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_int64_t_le(int64_t* result, buffers_read_callback_t cb, void* state) {
+    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state); if (r < 0) return r;
     *result = (int64_t)tmp; return 0;
 }
-int buffers_write_int64_t(int64_t value, buffers_write_callback_t cb, void* state) {
-    return buffers_write_uint64_t((uint64_t)value, cb, state);
+int buffers_write_int64_t_le(int64_t value, buffers_write_callback_t cb, void* state) {
+    return buffers_write_uint64_t_le((uint64_t)value, cb, state);
 }
 int buffers_read_int64_t_be(int64_t* result, buffers_read_callback_t cb, void* state) {
     uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state); if (r < 0) return r;
@@ -198,13 +198,13 @@ int buffers_write_int64_t_be(int64_t value, buffers_write_callback_t cb, void* s
 /* =========================================================================
  * float  (IEEE 754, reinterpreted as uint32_t)
  * ========================================================================= */
-int buffers_read_float(float* result, buffers_read_callback_t cb, void* state) {
-    uint32_t tmp; int r = buffers_read_uint32_t(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_float_le(float* result, buffers_read_callback_t cb, void* state) {
+    uint32_t tmp; int r = buffers_read_uint32_t_le(&tmp, cb, state); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(float)); return 0;
 }
-int buffers_write_float(float value, buffers_write_callback_t cb, void* state) {
+int buffers_write_float_le(float value, buffers_write_callback_t cb, void* state) {
     uint32_t tmp; memcpy(&tmp, &value, sizeof(float));
-    return buffers_write_uint32_t(tmp, cb, state);
+    return buffers_write_uint32_t_le(tmp, cb, state);
 }
 int buffers_read_float_be(float* result, buffers_read_callback_t cb, void* state) {
     uint32_t tmp; int r = buffers_read_uint32_t_be(&tmp, cb, state); if (r < 0) return r;
@@ -218,13 +218,13 @@ int buffers_write_float_be(float value, buffers_write_callback_t cb, void* state
 /* =========================================================================
  * double  (IEEE 754, reinterpreted as uint64_t)
  * ========================================================================= */
-int buffers_read_double(double* result, buffers_read_callback_t cb, void* state) {
-    uint64_t tmp; int r = buffers_read_uint64_t(&tmp, cb, state); if (r < 0) return r;
+int buffers_read_double_le(double* result, buffers_read_callback_t cb, void* state) {
+    uint64_t tmp; int r = buffers_read_uint64_t_le(&tmp, cb, state); if (r < 0) return r;
     memcpy(result, &tmp, sizeof(double)); return 0;
 }
-int buffers_write_double(double value, buffers_write_callback_t cb, void* state) {
+int buffers_write_double_le(double value, buffers_write_callback_t cb, void* state) {
     uint64_t tmp; memcpy(&tmp, &value, sizeof(double));
-    return buffers_write_uint64_t(tmp, cb, state);
+    return buffers_write_uint64_t_le(tmp, cb, state);
 }
 int buffers_read_double_be(double* result, buffers_read_callback_t cb, void* state) {
     uint64_t tmp; int r = buffers_read_uint64_t_be(&tmp, cb, state); if (r < 0) return r;
@@ -249,45 +249,45 @@ int buffers_read_unsigned_char(unsigned char* r, buffers_read_callback_t cb, voi
 int buffers_write_unsigned_char(unsigned char v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint8_t((uint8_t)v, cb, s); }
 
-int buffers_read_short(short* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int16_t((int16_t*)r, cb, s); }
-int buffers_write_short(short v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_int16_t((int16_t)v, cb, s); }
+int buffers_read_short_le(short* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_int16_t_le((int16_t*)r, cb, s); }
+int buffers_write_short_le(short v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int16_t_le((int16_t)v, cb, s); }
 
-int buffers_read_unsigned_short(unsigned short* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint16_t((uint16_t*)r, cb, s); }
-int buffers_write_unsigned_short(unsigned short v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_uint16_t((uint16_t)v, cb, s); }
+int buffers_read_unsigned_short_le(unsigned short* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_uint16_t_le((uint16_t*)r, cb, s); }
+int buffers_write_unsigned_short_le(unsigned short v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint16_t_le((uint16_t)v, cb, s); }
 
-int buffers_read_int(int* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int32_t((int32_t*)r, cb, s); }
-int buffers_write_int(int v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_int32_t((int32_t)v, cb, s); }
+int buffers_read_int_le(int* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_int32_t_le((int32_t*)r, cb, s); }
+int buffers_write_int_le(int v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int32_t_le((int32_t)v, cb, s); }
 
-int buffers_read_unsigned_int(unsigned int* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint32_t((uint32_t*)r, cb, s); }
-int buffers_write_unsigned_int(unsigned int v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_uint32_t((uint32_t)v, cb, s); }
+int buffers_read_unsigned_int_le(unsigned int* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_uint32_t_le((uint32_t*)r, cb, s); }
+int buffers_write_unsigned_int_le(unsigned int v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_le((uint32_t)v, cb, s); }
 
-int buffers_read_long(long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int32_t((int32_t*)r, cb, s); }
-int buffers_write_long(long v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_int32_t((int32_t)v, cb, s); }
+int buffers_read_long_le(long* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_int32_t_le((int32_t*)r, cb, s); }
+int buffers_write_long_le(long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int32_t_le((int32_t)v, cb, s); }
 
-int buffers_read_unsigned_long(unsigned long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint32_t((uint32_t*)r, cb, s); }
-int buffers_write_unsigned_long(unsigned long v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_uint32_t((uint32_t)v, cb, s); }
+int buffers_read_unsigned_long_le(unsigned long* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_uint32_t_le((uint32_t*)r, cb, s); }
+int buffers_write_unsigned_long_le(unsigned long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_le((uint32_t)v, cb, s); }
 
-int buffers_read_long_long(long long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int64_t((int64_t*)r, cb, s); }
-int buffers_write_long_long(long long v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_int64_t((int64_t)v, cb, s); }
+int buffers_read_long_long_le(long long* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_int64_t_le((int64_t*)r, cb, s); }
+int buffers_write_long_long_le(long long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int64_t_le((int64_t)v, cb, s); }
 
-int buffers_read_unsigned_long_long(unsigned long long* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_uint64_t((uint64_t*)r, cb, s); }
-int buffers_write_unsigned_long_long(unsigned long long v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_uint64_t((uint64_t)v, cb, s); }
+int buffers_read_unsigned_long_long_le(unsigned long long* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_uint64_t_le((uint64_t*)r, cb, s); }
+int buffers_write_unsigned_long_long_le(unsigned long long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint64_t_le((uint64_t)v, cb, s); }
 
 int buffers_read_bool(bool* r, buffers_read_callback_t cb, void* s) {
     uint8_t tmp; int res = buffers_read_uint8_t(&tmp, cb, s); if (res < 0) return res;
@@ -295,13 +295,13 @@ int buffers_read_bool(bool* r, buffers_read_callback_t cb, void* s) {
 int buffers_write_bool(bool v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint8_t(v ? 1 : 0, cb, s); }
 
-int buffers_read_wchar_t(wchar_t* r, buffers_read_callback_t cb, void* s) {
-    return buffers_read_int16_t((int16_t*)r, cb, s); }
-int buffers_write_wchar_t(wchar_t v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_int16_t((int16_t)v, cb, s); }
+int buffers_read_wchar_t_le(wchar_t* r, buffers_read_callback_t cb, void* s) {
+    return buffers_read_int16_t_le((int16_t*)r, cb, s); }
+int buffers_write_wchar_t_le(wchar_t v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int16_t_le((int16_t)v, cb, s); }
 
-int buffers_read_size_t(size_t* r, buffers_read_callback_t cb, void* s) {
-    uint32_t tmp; int res = buffers_read_uint32_t(&tmp, cb, s); if (res < 0) return res;
+int buffers_read_size_t_le(size_t* r, buffers_read_callback_t cb, void* s) {
+    uint32_t tmp; int res = buffers_read_uint32_t_le(&tmp, cb, s); if (res < 0) return res;
     *r = (size_t)tmp; return 0; }
-int buffers_write_size_t(size_t v, buffers_write_callback_t cb, void* s) {
-    return buffers_write_uint32_t((uint32_t)v, cb, s); }
+int buffers_write_size_t_le(size_t v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_le((uint32_t)v, cb, s); }

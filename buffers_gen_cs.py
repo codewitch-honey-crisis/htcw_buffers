@@ -9,11 +9,13 @@ Options:
   --fixed            Use fixed-size serialization for arrays and strings
                     (transmit entire declared size). Without this flag,
                     arrays/strings are length-prefixed on the wire.
+  --big-endian      Generate struct read/write methods using big-endian
+                    serialization. Without this flag, little-endian is used.
   --namespace <Ns>   File-scoped namespace for generated code (default: none)
   --public           Emit public visibility (default: implicit internal)
 
 Outputs:
-  <StemName>Buffers.cs  - partial structs + enums with Read/Write/ReadBE/WriteBE
+  <StemName>Buffers.cs  - partial structs + enums with TryRead/TryWrite
   Buffers.cs            - shared supporting code (namespace Htcw)
 
 Naming:
@@ -21,6 +23,7 @@ Naming:
     * 1-2 char words: ALL CAPS  (e.g. ip, id -> IP, ID)
     * 3+ char words: PascalCase (e.g. address -> Address)
   - _t suffix stripped from typedef names before conversion
+  - TryRead/TryWrite methods have no LE/BE suffix regardless of endianness
 """
 
 import os
@@ -563,7 +566,7 @@ def gen_field_declarations(fields: list, structs: dict, member_vis: str) -> list
 def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                        big_endian: bool, indent: str = "        ",
                        fixed_mode: bool = True) -> list:
-    suffix = "BE" if big_endian else ""
+    nested_suffix = ""  # nested struct calls are always unsuffixed
     bp_read = bp_read_be if big_endian else bp_read_le
     all_struct_names = set(structs.keys())
     lines = []
@@ -630,7 +633,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>({arr});")
                 lines.append(f"{inner}for (int i = 0; i < {arr}; i++)")
                 lines.append(f"{inner}{{")
-                lines.append(f"{inner2}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
+                lines.append(f"{inner2}if (!{nested_cs}.TryRead{nested_suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
                 lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
                 lines.append(f"{inner2}offset += _n_{cs_field};")
                 lines.append(f"{inner}}}")
@@ -649,7 +652,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>(_len_{cs_field});")
                 lines.append(f"{inner}for (int i = 0; i < _len_{cs_field}; i++)")
                 lines.append(f"{inner}{{")
-                lines.append(f"{inner2}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
+                lines.append(f"{inner2}if (!{nested_cs}.TryRead{nested_suffix}(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
                 lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
                 lines.append(f"{inner2}offset += _n_{cs_field};")
                 lines.append(f"{inner}}}")
@@ -719,7 +722,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
             # single field
             if is_struct:
                 nested_cs = to_dotnet_name(wt)
-                lines.append(f"{indent}if (!{nested_cs}.TryRead{suffix}(span.Slice(offset), out {nested_cs} _{cs_field}_val, out int _n_{cs_field})) return false;")
+                lines.append(f"{indent}if (!{nested_cs}.TryRead{nested_suffix}(span.Slice(offset), out {nested_cs} _{cs_field}_val, out int _n_{cs_field})) return false;")
                 lines.append(f"{indent}result.{cs_field} = _{cs_field}_val;")
                 lines.append(f"{indent}offset += _n_{cs_field};")
             else:
@@ -746,7 +749,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
 def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
                         big_endian: bool, indent: str = "        ",
                         fixed_mode: bool = True) -> list:
-    suffix = "BE" if big_endian else ""
+    nested_suffix = ""  # nested struct calls are always unsuffixed
     bp_write = bp_write_be if big_endian else bp_write_le
     bp_read_fn = bp_read_be if big_endian else bp_read_le  # not used but kept for symmetry
     all_struct_names = set(structs.keys())
@@ -823,7 +826,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
                 lines.append(f"{inner}{{")
                 lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
-                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{nested_suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
                 lines.append(f"{inner2}offset += _w_{cs_field};")
                 lines.append(f"{inner}}}")
                 # zero-fill any un-written slots
@@ -848,7 +851,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
                 lines.append(f"{inner}{{")
                 lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
-                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite{nested_suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
                 lines.append(f"{inner2}offset += _w_{cs_field};")
                 lines.append(f"{inner}}}")
                 lines.append(f"{indent}}}")
@@ -919,7 +922,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
             if is_struct:
                 nested_cs = to_dotnet_name(wt)
                 lines.append(f"{indent}if ({cs_field} == null) return false;")
-                lines.append(f"{indent}if (!{cs_field}.TryWrite{suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{indent}if (!{cs_field}.TryWrite{nested_suffix}(span.Slice(offset), out int _w_{cs_field})) return false;")
                 lines.append(f"{indent}offset += _w_{cs_field};")
             else:
                 lines.append(f"{indent}if (span.Length - offset < {sz}) return false;")
@@ -999,7 +1002,7 @@ def gen_size_of_struct_body(fields: list, structs: dict, prefix: str = "        
 
 def gen_struct_cs(struct_name: str, info: dict, structs: dict,
                   enums: dict, type_vis: str, member_vis: str, wire_size: int,
-                  fixed_mode: bool = True) -> str:
+                  fixed_mode: bool = True, big_endian: bool = False) -> str:
     cs_name = info['cs_name']
     fields = info['fields']
     lines = []
@@ -1019,43 +1022,37 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
             lines.append(f"    {member_vis}int SizeOfStruct => 0;")
             lines.append("")
 
-        # Public Span overloads (LE and BE) — no-op implementations
-        for big_endian in (False, True):
-            suffix = "BE" if big_endian else ""
+        # Public Span overloads — no-op implementations (single endianness, no suffix)
+        lines.append(f"    {member_vis}static bool TryRead(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
+        lines.append("    {")
+        lines.append(f"        result = new {cs_name}();")
+        lines.append("        bytesRead = 0;")
+        lines.append("        return true;")
+        lines.append("    }")
+        lines.append("")
 
-            lines.append(f"    {member_vis}static bool TryRead{suffix}(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
-            lines.append("    {")
-            lines.append(f"        result = new {cs_name}();")
-            lines.append("        bytesRead = 0;")
-            lines.append("        return true;")
-            lines.append("    }")
-            lines.append("")
+        lines.append(f"    {member_vis}bool TryWrite(Span<byte> destination, out int bytesWritten)")
+        lines.append("    {")
+        lines.append("        bytesWritten = 0;")
+        lines.append("        return true;")
+        lines.append("    }")
+        lines.append("")
 
-            lines.append(f"    {member_vis}bool TryWrite{suffix}(Span<byte> destination, out int bytesWritten)")
-            lines.append("    {")
-            lines.append("        bytesWritten = 0;")
-            lines.append("        return true;")
-            lines.append("    }")
-            lines.append("")
+        # Stream overloads — no-op implementations (single endianness, no suffix)
+        lines.append(f"    {member_vis}static bool TryRead(Stream stream, out {cs_name} result, out int bytesRead)")
+        lines.append("    {")
+        lines.append(f"        result = new {cs_name}();")
+        lines.append("        bytesRead = 0;")
+        lines.append("        return true;")
+        lines.append("    }")
+        lines.append("")
 
-        # Stream overloads (LE and BE) — no-op implementations
-        for big_endian in (False, True):
-            suffix = "BE" if big_endian else ""
-
-            lines.append(f"    {member_vis}static bool TryRead{suffix}(Stream stream, out {cs_name} result, out int bytesRead)")
-            lines.append("    {")
-            lines.append(f"        result = new {cs_name}();")
-            lines.append("        bytesRead = 0;")
-            lines.append("        return true;")
-            lines.append("    }")
-            lines.append("")
-
-            lines.append(f"    {member_vis}bool TryWrite{suffix}(Stream stream, out int bytesWritten)")
-            lines.append("    {")
-            lines.append("        bytesWritten = 0;")
-            lines.append("        return true;")
-            lines.append("    }")
-            lines.append("")
+        lines.append(f"    {member_vis}bool TryWrite(Stream stream, out int bytesWritten)")
+        lines.append("    {")
+        lines.append("        bytesWritten = 0;")
+        lines.append("        return true;")
+        lines.append("    }")
+        lines.append("")
 
         lines.append("}")
         return "\n".join(lines)
@@ -1074,59 +1071,50 @@ def gen_struct_cs(struct_name: str, info: dict, structs: dict,
         lines.append("    }")
         lines.append("")
 
-    # Private span cores (LE and BE)
-    for big_endian in (False, True):
-        suffix = "BE" if big_endian else ""
+    # Private span cores (single endianness, no suffix on method names)
+    lines.append(f"    private static bool TryReadCore(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
+    lines.append("    {")
+    lines.extend(gen_span_read_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
+    lines.append("    }")
+    lines.append("")
 
-        lines.append(f"    private static bool TryRead{suffix}Core(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
-        lines.append("    {")
-        lines.extend(gen_span_read_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
-        lines.append("    }")
-        lines.append("")
+    lines.append(f"    private bool TryWriteCore(Span<byte> span, out int bytesWritten)")
+    lines.append("    {")
+    lines.extend(gen_span_write_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
+    lines.append("    }")
+    lines.append("")
 
-        lines.append(f"    private bool TryWrite{suffix}Core(Span<byte> span, out int bytesWritten)")
-        lines.append("    {")
-        lines.extend(gen_span_write_core(cs_name, fields, structs, big_endian, fixed_mode=fixed_mode))
-        lines.append("    }")
-        lines.append("")
+    # Public Span overloads (single endianness, no suffix)
+    lines.append(f"    {member_vis}static bool TryRead(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
+    lines.append("    {")
+    lines.append(f"        return TryReadCore(span, out result, out bytesRead);")
+    lines.append("    }")
+    lines.append("")
 
-    # Public Span overloads
-    for big_endian in (False, True):
-        suffix = "BE" if big_endian else ""
+    lines.append(f"    {member_vis}bool TryWrite(Span<byte> destination, out int bytesWritten)")
+    lines.append("    {")
+    lines.append(f"        return TryWriteCore(destination, out bytesWritten);")
+    lines.append("    }")
+    lines.append("")
 
-        lines.append(f"    {member_vis}static bool TryRead{suffix}(ReadOnlySpan<byte> span, out {cs_name} result, out int bytesRead)")
-        lines.append("    {")
-        lines.append(f"        return TryRead{suffix}Core(span, out result, out bytesRead);")
-        lines.append("    }")
-        lines.append("")
+    # Stream overloads (single endianness, no suffix)
+    lines.append(f"    {member_vis}static bool TryRead(Stream stream, out {cs_name} result, out int bytesRead)")
+    lines.append("    {")
+    lines.append(f"        Span<byte> buf = stackalloc byte[{wire_size}];")
+    lines.append(f"        int n = stream.Read(buf);")
+    lines.append(f"        if (n < {wire_size}) {{ result = null; bytesRead = n; return false; }}")
+    lines.append(f"        return TryReadCore(buf, out result, out bytesRead);")
+    lines.append("    }")
+    lines.append("")
 
-        lines.append(f"    {member_vis}bool TryWrite{suffix}(Span<byte> destination, out int bytesWritten)")
-        lines.append("    {")
-        lines.append(f"        return TryWrite{suffix}Core(destination, out bytesWritten);")
-        lines.append("    }")
-        lines.append("")
-
-    # Stream overloads
-    for big_endian in (False, True):
-        suffix = "BE" if big_endian else ""
-
-        lines.append(f"    {member_vis}static bool TryRead{suffix}(Stream stream, out {cs_name} result, out int bytesRead)")
-        lines.append("    {")
-        lines.append(f"        Span<byte> buf = stackalloc byte[{wire_size}];")
-        lines.append(f"        int n = stream.Read(buf);")
-        lines.append(f"        if (n < {wire_size}) {{ result = null; bytesRead = n; return false; }}")
-        lines.append(f"        return TryRead{suffix}Core(buf, out result, out bytesRead);")
-        lines.append("    }")
-        lines.append("")
-
-        lines.append(f"    {member_vis}bool TryWrite{suffix}(Stream stream, out int bytesWritten)")
-        lines.append("    {")
-        lines.append(f"        Span<byte> buf = stackalloc byte[{wire_size}];")
-        lines.append(f"        if (!TryWrite{suffix}Core(buf, out bytesWritten)) return false;")
-        lines.append(f"        stream.Write(buf.Slice(0, bytesWritten));")
-        lines.append(f"        return true;")
-        lines.append("    }")
-        lines.append("")
+    lines.append(f"    {member_vis}bool TryWrite(Stream stream, out int bytesWritten)")
+    lines.append("    {")
+    lines.append(f"        Span<byte> buf = stackalloc byte[{wire_size}];")
+    lines.append(f"        if (!TryWriteCore(buf, out bytesWritten)) return false;")
+    lines.append(f"        stream.Write(buf.Slice(0, bytesWritten));")
+    lines.append(f"        return true;")
+    lines.append("    }")
+    lines.append("")
 
     lines.append("}")
     return "\n".join(lines)
@@ -1169,7 +1157,8 @@ def gen_maxsize_cs(header_stem: str, max_size: int, type_vis: str, member_vis: s
 # ---------------------------------------------------------------------------
 
 def generate_cs_file(header_path: str, structs: dict, enums: dict,
-                     namespace: str, is_public: bool, fixed_mode: bool = True) -> str:
+                     namespace: str, is_public: bool, fixed_mode: bool = True,
+                     big_endian: bool = False) -> str:
     type_vis   = "public " if is_public else ""
     member_vis = "public " if is_public else "internal "
     stem = os.path.splitext(os.path.basename(header_path))[0]
@@ -1203,7 +1192,7 @@ def generate_cs_file(header_path: str, structs: dict, enums: dict,
     # Structs
     for struct_name, info in structs.items():
         wire_size = struct_wire_size(struct_name, structs, fixed_mode=fixed_mode)
-        lines.append(gen_struct_cs(struct_name, info, structs, enums, type_vis, member_vis, wire_size, fixed_mode=fixed_mode))
+        lines.append(gen_struct_cs(struct_name, info, structs, enums, type_vis, member_vis, wire_size, fixed_mode=fixed_mode, big_endian=big_endian))
         lines.append("")
 
     lines.append("#nullable restore")
@@ -1302,6 +1291,7 @@ def main():
     gen_buffers = False
     out_dir = ""
     fixed_mode = False  # Default: variable-length (length-prefixed) serialization
+    big_endian = False
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--namespace':
@@ -1316,11 +1306,13 @@ def main():
             out_dir = args.pop(0)
         elif opt == '--fixed':
             fixed_mode = True
+        elif opt == '--big-endian':
+            big_endian = True
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--fixed] [--namespace <Ns>] [--public] [--buffers] <header.h>",
+        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--namespace <Ns>] [--public] [--buffers] <header.h>",
               file=sys.stderr)
         sys.exit(1)
 
@@ -1344,7 +1336,7 @@ def main():
     cs_path      = os.path.join(out_dir, f"{cs_stem}Buffers.cs")
     
     with open(cs_path, 'w') as f:
-        f.write(generate_cs_file(path, structs, enums, namespace, is_public, fixed_mode=fixed_mode))
+        f.write(generate_cs_file(path, structs, enums, namespace, is_public, fixed_mode=fixed_mode, big_endian=big_endian))
     print(f"Written: {cs_path}")
     
     if gen_buffers:

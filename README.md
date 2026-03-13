@@ -31,6 +31,7 @@ Flatbuffers has complicated build requirements and doesn't lend itself to buildi
 ## Generating C code
 Options:
 - `--buffers` generate shared code
+- `--big-endian` generate big endian wire format (defaults little endian)
 - `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
 - `--out <dir>` override the output directory
 - `--prefix <prefix>` use the given prefix on generated method and define code.
@@ -41,6 +42,7 @@ python .\buffers_gen_c.py --buffers example.h
 ## C# code
 Options:
 - `--buffers` generate shared code
+- `--big-endian` generate big endian wire format (defaults little endian)
 - `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
 - `--public` generate public types
 - `--namespace <namespace>` generate under the indicated namespace

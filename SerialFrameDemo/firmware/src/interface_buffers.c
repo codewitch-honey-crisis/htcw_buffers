@@ -49,13 +49,13 @@ size_t st_rng_message_size(const st_rng_message_t* s) {
 
 int st_gpio_get_message_read(st_gpio_get_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
-    res = buffers_read_uint64_t(&s->mask, on_read, on_read_state);
+    res = buffers_read_uint64_t_le(&s->mask, on_read, on_read_state);
     return res;
 }
 
 int st_gpio_get_message_write(const st_gpio_get_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
     int res;
-    res = buffers_write_uint64_t(s->mask, on_write, on_write_state);
+    res = buffers_write_uint64_t_le(s->mask, on_write, on_write_state);
     return res;
 }
 
@@ -67,17 +67,17 @@ size_t st_gpio_get_message_size(const st_gpio_get_message_t* s) {
 
 int st_gpio_set_message_read(st_gpio_set_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
-    res = buffers_read_uint64_t(&s->mask, on_read, on_read_state);
+    res = buffers_read_uint64_t_le(&s->mask, on_read, on_read_state);
     if(res < 0) { return res; }
-    res = buffers_read_uint64_t(&s->values, on_read, on_read_state);
+    res = buffers_read_uint64_t_le(&s->values, on_read, on_read_state);
     return res;
 }
 
 int st_gpio_set_message_write(const st_gpio_set_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
     int res;
-    res = buffers_write_uint64_t(s->mask, on_write, on_write_state);
+    res = buffers_write_uint64_t_le(s->mask, on_write, on_write_state);
     if(res < 0) { return res; }
-    res = buffers_write_uint64_t(s->values, on_write, on_write_state);
+    res = buffers_write_uint64_t_le(s->values, on_write, on_write_state);
     return res;
 }
 
@@ -190,13 +190,13 @@ size_t st_esp_idf_version_response_message_size(const st_esp_idf_version_respons
 
 int st_rng_response_message_read(st_rng_response_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
-    res = buffers_read_uint32_t(&s->value, on_read, on_read_state);
+    res = buffers_read_uint32_t_le(&s->value, on_read, on_read_state);
     return res;
 }
 
 int st_rng_response_message_write(const st_rng_response_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
     int res;
-    res = buffers_write_uint32_t(s->value, on_write, on_write_state);
+    res = buffers_write_uint32_t_le(s->value, on_write, on_write_state);
     return res;
 }
 
@@ -208,13 +208,13 @@ size_t st_rng_response_message_size(const st_rng_response_message_t* s) {
 
 int st_gpio_get_response_message_read(st_gpio_get_response_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
-    res = buffers_read_uint64_t(&s->values, on_read, on_read_state);
+    res = buffers_read_uint64_t_le(&s->values, on_read, on_read_state);
     return res;
 }
 
 int st_gpio_get_response_message_write(const st_gpio_get_response_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
     int res;
-    res = buffers_write_uint64_t(s->values, on_write, on_write_state);
+    res = buffers_write_uint64_t_le(s->values, on_write, on_write_state);
     return res;
 }
 
