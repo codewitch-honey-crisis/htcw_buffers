@@ -68,7 +68,8 @@ static void loop() {
                     puts("ESP-IDF version requested");
                     buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
                     st_esp_idf_version_response_message_t resp;
-                    strcpy(resp.version,esp_get_idf_version());
+                    strcpy(resp.version,"ESP-IDF v");
+                    strcat(resp.version,esp_get_idf_version());
                     resp.major = ESP_IDF_VERSION_MAJOR;
                     resp.minor = ESP_IDF_VERSION_MINOR;
                     resp.patch = ESP_IDF_VERSION_PATCH;
