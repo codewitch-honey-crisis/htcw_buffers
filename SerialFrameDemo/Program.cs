@@ -20,7 +20,7 @@ internal class Program
         var session = new EspSerialSession(args[0],true);
         var buffer = new byte[InterfaceMaxSize.Value];
         Console.Error.WriteLine($"Connected to {args[0]}");
-        session.Disconnected += Session_Disconnected;
+        session.ConnectionError += Session_ConnectionError;
         session.FrameReceived += Session_FrameReceived;
         session.FrameError += Session_FrameError;
         while (_connected)
@@ -258,7 +258,7 @@ internal class Program
 
     }
 
-    private static void Session_Disconnected(object? sender, EventArgs e)
+    private static void Session_ConnectionError(object? sender, EventArgs e)
     {
         _connected = false;
         Thread.MemoryBarrier();

@@ -151,7 +151,7 @@ internal partial class EspSerialSession : IDisposable
     readonly object _lock;
     SynchronizationContext? _sync;
     Task _readTask, _statTask;
-    public event EventHandler<EventArgs>? Disconnected;
+    public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
     public event EventHandler<FrameReceivedEventArgs>? FrameError;
 
@@ -165,8 +165,19 @@ internal partial class EspSerialSession : IDisposable
                 // CancelIoEx unblocks any pending ReadFile / WaitCommEvent.
                 // They will complete with ERROR_OPERATION_ABORTED and the
                 // IOCP callback will fire, resolving the tasks.
-                CancelIoEx(_handle, IntPtr.Zero);
-                Task.WaitAll([_statTask, _readTask]);
+                try
+                {
+                    CancelIoEx(_handle, IntPtr.Zero);
+                }
+                catch(Win32Exception) { }
+                try
+                {
+                    Task.WaitAll([_statTask, _readTask]);
+                }
+                catch(AggregateException)
+                {
+
+                }
                 _boundHandle.Dispose();
                 _handle.Dispose();
             }
@@ -194,7 +205,15 @@ internal partial class EspSerialSession : IDisposable
         Span<byte> crc = [0, 0, 0, 0];
         BinaryPrimitives.WriteUInt32LittleEndian(crc, Crc32(data));
         Span<byte> toWrite = [cmd, cmd, cmd, cmd, cmd, cmd, cmd, cmd, .. len, .. crc, .. data];
-        WriteAll(toWrite);
+        try
+        {
+            WriteAll(toWrite);
+        }
+        catch (Win32Exception)
+        {
+            OnConnectionError(EventArgs.Empty);
+            Dispose(true);
+        }
     }
 
     private unsafe void WriteAll(ReadOnlySpan<byte> data)
@@ -240,18 +259,18 @@ internal partial class EspSerialSession : IDisposable
         }
     }
 
-    private void OnDisconnected(EventArgs args)
+    private void OnConnectionError(EventArgs args)
     {
         if (_disposed) return;
-        if (Disconnected != null)
+        if (ConnectionError != null)
         {
             if (_sync == null)
             {
-                Disconnected?.Invoke(this, args);
+                ConnectionError?.Invoke(this, args);
             }
             else
             {
-                _sync.Post((state) => Disconnected?.Invoke(this, args), null);
+                _sync.Post((state) => ConnectionError?.Invoke(this, args), null);
             }
         }
     }
@@ -453,7 +472,7 @@ internal partial class EspSerialSession : IDisposable
                     int mask = await WaitCommEventAsync();
                     if ((mask & (int)EV_RLSD) != 0 && !_closing)
                     {
-                        OnDisconnected(EventArgs.Empty);
+                        OnConnectionError(EventArgs.Empty);
                         break;
                     }
                 }
@@ -462,7 +481,7 @@ internal partial class EspSerialSession : IDisposable
             catch (Exception)
             {
                 if (!_closing)
-                    OnDisconnected(EventArgs.Empty);
+                    OnConnectionError(EventArgs.Empty);
             }
         });
 
@@ -515,7 +534,7 @@ internal partial class EspSerialSession : IDisposable
             catch (IOException)
             {
                 if (!_closing)
-                    OnDisconnected(EventArgs.Empty);
+                    OnConnectionError(EventArgs.Empty);
             }
         });
     }
