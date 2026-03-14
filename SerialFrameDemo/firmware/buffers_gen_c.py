@@ -337,10 +337,12 @@ def parse_header(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def wire_size_of(wire_type: str, array_len, structs: dict,
-                 _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
+                 _visiting: frozenset = frozenset(), fixed_mode: bool = True,
+                 is_string: bool = False) -> int:
     """Return the wire byte size of a single field, recursing into nested structs.
     In fixed mode, arrays use their full declared size.
-    In variable mode, arrays use their max size (full declared size + length prefix)."""
+    In variable mode, only string arrays (char[N], wchar_t[N]) include a length
+    prefix; non-string arrays always use their full declared size."""
     if wire_type in WIRE_TYPE_SIZES:
         element_size = WIRE_TYPE_SIZES[wire_type]
     elif wire_type in structs:
@@ -352,16 +354,22 @@ def wire_size_of(wire_type: str, array_len, structs: dict,
 
     count = array_len if array_len is not None else 1
     size = element_size * count
-    if not fixed_mode and array_len is not None:
+    if not fixed_mode and array_len is not None and is_string:
         size += length_prefix_size(array_len)
     return size
+
+
+def _field_is_string(f: dict) -> bool:
+    """Return True if this field is a string (char[N] or wchar_t[N])."""
+    return f['array_len'] is not None and f['type'] in ('char', 'wchar_t')
 
 
 def struct_wire_size(struct_name: str, structs: dict,
                      _visiting: frozenset = frozenset(), fixed_mode: bool = True) -> int:
     """Return the total wire byte size of a single instance of struct_name."""
     return sum(
-        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting, fixed_mode=fixed_mode)
+        wire_size_of(f['wire_type'], f['array_len'], structs, _visiting,
+                     fixed_mode=fixed_mode, is_string=_field_is_string(f))
         for f in structs[struct_name]['fields']
     )
 
@@ -446,24 +454,27 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
         lines.append("    int total = 0;")
         for i, f in enumerate(fields):
             if f['array_len'] is not None:
-                if fixed_mode:
+                is_string = _field_is_string(f)
+                if fixed_mode or not is_string:
+                    # Fixed mode, or non-string array in variable mode:
+                    # write all array_len elements with no length prefix
                     lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
                     stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ", endian_suffix=endian_suffix)
                     lines.extend(stmts)
                     lines.append("    }")
                 else:
-                    # Variable mode: compute length, write prefix, then elements
+                    # Variable mode, string field: compute length, write prefix, then elements
                     lp_type = length_prefix_type(f['array_len'])
-                    is_string = (f['type'] == 'char')
                     lines.append(f"    {{")
-                    if is_string:
-                        lines.append(f"        {lp_type} _len_{f['name']} = 0;")
-                        lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    lines.append(f"        {lp_type} _len_{f['name']} = 0;")
+                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                    if f['type'] == 'char':
                         lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
-                        lines.append(f"            _len_{f['name']}++;")
-                        lines.append(f"        }}")
                     else:
-                        lines.append(f"        {lp_type} _len_{f['name']} = {f['array_len']};")
+                        # wchar_t
+                        lines.append(f"            if(s->{f['name']}[i] == L'\\0') break;")
+                    lines.append(f"            _len_{f['name']}++;")
+                    lines.append(f"        }}")
                     lines.append(f"        res = buffers_write_{lp_type}{endian_suffix_for_type(lp_type, endian_suffix)}(_len_{f['name']}, on_write, on_write_state);")
                     lines.append(f"        if(res < 0) {{ return res; }}")
                     lines.append(f"        total += res;")
@@ -493,42 +504,37 @@ def gen_size_fn(prefix, struct_name, fields, all_struct_names):
     lines.append("    size_t size = 0;")
     for f in fields:
         if f['array_len'] is not None:
-            lp_type = length_prefix_type(f['array_len'])
-            lp_sz = WIRE_TYPE_SIZES[lp_type]
-            is_string = (f['type'] == 'char')
+            is_string = _field_is_string(f)
             wt = f['wire_type']
 
-            if wt in all_struct_names:
-                # nested struct array: length prefix + sum of nested sizes
-                nested_size_fn = size_fn_name(prefix, wt)
-                lines.append(f"    {{")
-                if is_string:
-                    # string of structs doesn't really make sense, but handle generically
-                    lines.append(f"        size += {lp_sz};")
-                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
-                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
-                    lines.append(f"        }}")
-                else:
-                    lines.append(f"        size += {lp_sz};")
-                    lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
-                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
-                    lines.append(f"        }}")
-                lines.append(f"    }}")
-            else:
-                elem_sz = WIRE_TYPE_SIZES.get(wt, 0)
-                if is_string:
-                    # For strings: prefix + strlen (up to array_len)
+            if not is_string:
+                # Non-string array: no length prefix, always full declared size
+                if wt in all_struct_names:
+                    nested_size_fn = size_fn_name(prefix, wt)
                     lines.append(f"    {{")
-                    lines.append(f"        {lp_type} _len = 0;")
                     lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
-                    lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
-                    lines.append(f"            _len++;")
+                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
                     lines.append(f"        }}")
-                    lines.append(f"        size += {lp_sz} + (size_t)_len * {elem_sz};")
                     lines.append(f"    }}")
                 else:
-                    # Non-string array: prefix + full array (always writes all elements)
-                    lines.append(f"    size += {lp_sz} + (size_t){f['array_len']} * {elem_sz};")
+                    elem_sz = WIRE_TYPE_SIZES.get(wt, 0)
+                    lines.append(f"    size += (size_t){f['array_len']} * {elem_sz};")
+            else:
+                # String array: length prefix + strlen (up to array_len)
+                lp_type = length_prefix_type(f['array_len'])
+                lp_sz = WIRE_TYPE_SIZES[lp_type]
+                elem_sz = WIRE_TYPE_SIZES.get(wt, 0)
+                lines.append(f"    {{")
+                lines.append(f"        {lp_type} _len = 0;")
+                lines.append(f"        for(int i = 0; i < {f['array_len']}; ++i) {{")
+                if f['type'] == 'char':
+                    lines.append(f"            if(s->{f['name']}[i] == '\\0') break;")
+                else:
+                    lines.append(f"            if(s->{f['name']}[i] == L'\\0') break;")
+                lines.append(f"            _len++;")
+                lines.append(f"        }}")
+                lines.append(f"        size += {lp_sz} + (size_t)_len * {elem_sz};")
+                lines.append(f"    }}")
         else:
             wt = f['wire_type']
             if wt in all_struct_names:
@@ -565,17 +571,18 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
         lines.append("    int bytes_read = 0;")
         for i, f in enumerate(fields):
             if f['array_len'] is not None:
-                if fixed_mode:
-                    # Fixed mode: read all array_len elements
+                is_string = _field_is_string(f)
+                if fixed_mode or not is_string:
+                    # Fixed mode, or non-string array in variable mode:
+                    # read all array_len elements with no length prefix
                     lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
                     stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ", endian_suffix=endian_suffix)
                     lines.extend(stmts)
                     lines.append("    }")
                 else:
-                    # Variable mode: read length prefix, then that many elements
+                    # Variable mode, string field: read length prefix, then that many elements
                     lp_type = length_prefix_type(f['array_len'])
                     lp_cs = lp_type  # e.g. uint8_t, uint16_t, uint32_t
-                    is_string = (f['type'] == 'char')
                     lines.append(f"    {{")
                     lines.append(f"        {lp_cs} _len_{f['name']};")
                     lines.append(f"        res = buffers_read_{lp_cs}{endian_suffix_for_type(lp_cs, endian_suffix)}(&_len_{f['name']}, on_read, on_read_state, &bytes_read);")
@@ -585,18 +592,11 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
                     stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="            ", endian_suffix=endian_suffix)
                     lines.extend(stmts)
                     lines.append(f"        }}")
-                    if is_string:
-                        # Place null terminator if there's room
-                        lines.append(f"        if(_len_{f['name']} < {f['array_len']}) {{")
-                        lines.append(f"            s->{f['name']}[_len_{f['name']}] = '\\0';")
-                        lines.append(f"        }}")
-                    else:
-                        # Zero remaining elements
-                        elem_size = WIRE_TYPE_SIZES.get(f['wire_type'], 0)
-                        if elem_size > 0:
-                            lines.append(f"        for(int i = (int)_len_{f['name']}; i < {f['array_len']}; ++i) {{")
-                            lines.append(f"            memset(&s->{f['name']}[i], 0, sizeof(s->{f['name']}[i]));")
-                            lines.append(f"        }}")
+                    # Place null terminator if there's room
+                    null_lit = "L'\\0'" if f['type'] == 'wchar_t' else "'\\0'"
+                    lines.append(f"        if(_len_{f['name']} < {f['array_len']}) {{")
+                    lines.append(f"            s->{f['name']}[_len_{f['name']}] = {null_lit};")
+                    lines.append(f"        }}")
                     lines.append(f"    }}")
             else:
                 stmts = gen_read_call(prefix, f, f"s->{f['name']}", all_struct_names, endian_suffix=endian_suffix)

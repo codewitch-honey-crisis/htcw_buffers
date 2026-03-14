@@ -260,18 +260,9 @@ size_t st_gpio_get_response_message_size(const st_gpio_get_response_message_t* s
 int st_mac_address_response_message_read(st_mac_address_response_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
     int bytes_read = 0;
-    {
-        uint8_t _len_address;
-        res = buffers_read_uint8_t(&_len_address, on_read, on_read_state, &bytes_read);
+    for(int i = 0; i < 6; ++i) {
+        res = buffers_read_uint8_t(&s->address[i], on_read, on_read_state, &bytes_read);
         if(res < 0) { return res; }
-        if(_len_address > 6) { return BUFFERS_ERROR_EOF; }
-        for(int i = 0; i < (int)_len_address; ++i) {
-            res = buffers_read_uint8_t(&s->address[i], on_read, on_read_state, &bytes_read);
-            if(res < 0) { return res; }
-        }
-        for(int i = (int)_len_address; i < 6; ++i) {
-            memset(&s->address[i], 0, sizeof(s->address[i]));
-        }
     }
     return bytes_read;
 }
@@ -279,22 +270,16 @@ int st_mac_address_response_message_read(st_mac_address_response_message_t* s, b
 int st_mac_address_response_message_write(const st_mac_address_response_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
     int res;
     int total = 0;
-    {
-        uint8_t _len_address = 6;
-        res = buffers_write_uint8_t(_len_address, on_write, on_write_state);
+    for(int i = 0; i < 6; ++i) {
+        res = buffers_write_uint8_t(s->address[i], on_write, on_write_state);
         if(res < 0) { return res; }
         total += res;
-        for(int i = 0; i < (int)_len_address; ++i) {
-            res = buffers_write_uint8_t(s->address[i], on_write, on_write_state);
-            if(res < 0) { return res; }
-            total += res;
-        }
     }
     return total;
 }
 
 size_t st_mac_address_response_message_size(const st_mac_address_response_message_t* s) {
     size_t size = 0;
-    size += 1 + (size_t)6 * 1;
+    size += (size_t)6 * 1;
     return size;
 }

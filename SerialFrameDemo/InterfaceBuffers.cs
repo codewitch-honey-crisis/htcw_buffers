@@ -599,7 +599,7 @@ partial class STGpioGetResponseMessage
 
 partial class STMacAddressResponseMessage
 {
-    internal const int StructMaxSize = 7;
+    internal const int StructMaxSize = 6;
 
     internal byte[] Address { get; set; }
 
@@ -608,7 +608,7 @@ partial class STMacAddressResponseMessage
         get
         {
             int size = 0;
-            size += 1 + 6 * 1;
+            size += 6 * 1;
             return size;
         }
     }
@@ -618,13 +618,9 @@ partial class STMacAddressResponseMessage
         bytesRead = 0;
         result = new STMacAddressResponseMessage();
         int offset = 0;
-        if (span.Length - offset < 1) return false;
         {
-            int _len_Address = (int)(span[offset]);
-            offset += 1;
-            if (_len_Address > 6) return false;
-            var _arr_Address = new byte[_len_Address];
-            for (int i = 0; i < _len_Address; i++)
+            var _arr_Address = new byte[6];
+            for (int i = 0; i < 6; i++)
             {
                 if (span.Length - offset < 1) return false;
                 _arr_Address[i] = span[offset];
@@ -642,13 +638,16 @@ partial class STMacAddressResponseMessage
         int offset = 0;
         {
             int _count_Address = Address != null ? Math.Min(Address.Length, 6) : 0;
-            if (span.Length - offset < 1) return false;
-            span[offset] = (byte)_count_Address;
-            offset += 1;
             for (int i = 0; i < _count_Address; i++)
             {
                 if (span.Length - offset < 1) return false;
                 span[offset] = Address[i];
+                offset += 1;
+            }
+            for (int i = _count_Address; i < 6; i++)
+            {
+                if (span.Length - offset < 1) return false;
+                span[offset] = (byte)0;
                 offset += 1;
             }
         }
@@ -668,15 +667,15 @@ partial class STMacAddressResponseMessage
 
     internal static bool TryRead(Stream stream, out STMacAddressResponseMessage result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[7];
+        Span<byte> buf = stackalloc byte[6];
         int n = stream.Read(buf);
-        if (n < 7) { result = null; bytesRead = n; return false; }
+        if (n < 6) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
     internal bool TryWrite(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[7];
+        Span<byte> buf = stackalloc byte[6];
         if (!TryWriteCore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
