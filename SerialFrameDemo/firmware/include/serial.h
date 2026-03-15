@@ -1,8 +1,8 @@
 #ifndef SERIAL_H
 #define SERIAL_H
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -12,4 +12,4 @@ void serial_putc(int value);
 #ifdef __cplusplus
 }
 #endif
-#endif // SERIAL_H
+#endif  // SERIAL_H

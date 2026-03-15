@@ -10,7 +10,7 @@
 static bool initialized = false;
 static const char* TAG = "Serial";
 bool serial_init(size_t max_payload) {
-    if(initialized) return true;
+    if (initialized) return true;
     esp_log_level_set(TAG, ESP_LOG_INFO);
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
@@ -36,12 +36,12 @@ error:
 }
 int serial_getc() {
     uint8_t tmp;
-    if(1==uart_read_bytes(UART_NUM_0,&tmp,1,0)) {
+    if (1 == uart_read_bytes(UART_NUM_0, &tmp, 1, 0)) {
         return tmp;
     }
     return -1;
 }
 void serial_putc(int value) {
     uint8_t tmp = value;
-    uart_write_bytes(UART_NUM_0,&tmp,1);
+    uart_write_bytes(UART_NUM_0, &tmp, 1);
 }

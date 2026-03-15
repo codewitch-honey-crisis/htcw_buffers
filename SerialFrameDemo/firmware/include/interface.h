@@ -5,8 +5,8 @@
 // python .\buffers_gen_cs.py --buffers interface.h
 #ifndef EXAMPLE_H
 #define EXAMPLE_H
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef enum {
     CMD_NONE,
@@ -50,7 +50,7 @@ typedef struct {
     st_gpio_mode_t mode;
 } st_gpio_mode_message_t;
 
-typedef struct {    
+typedef struct {
 } st_mac_address_message_t;
 
 typedef struct {
@@ -72,4 +72,4 @@ typedef struct {
     uint8_t address[6];
 } st_mac_address_response_message_t;
 
-#endif // EXAMPLE_H
+#endif  // EXAMPLE_H
