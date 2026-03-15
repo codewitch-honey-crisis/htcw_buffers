@@ -34,7 +34,7 @@ bool serial_init(size_t max_payload) {
 error:
     return false;
 }
-int serial_getc() {
+int serial_getc(void) {
     uint8_t tmp;
     if (1 == uart_read_bytes(UART_NUM_0, &tmp, 1, 0)) {
         return tmp;

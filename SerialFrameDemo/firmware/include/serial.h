@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 bool serial_init(size_t max_payload_size);
-int serial_getc();
+int serial_getc(void);
 void serial_putc(int value);
 #ifdef __cplusplus
 }
