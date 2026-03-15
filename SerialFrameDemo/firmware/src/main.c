@@ -65,16 +65,14 @@ int on_read_buffer(void* state) {
 }
 static void loop() {
     static uint8_t msg_buffer[INTERFACE_MAX_SIZE];
-    uint8_t cmd;
     void* ptr;
     size_t length;
     int res = frame_get(frame_handle,&ptr,&length);
     if(res>0) {
-        cmd = res;
         buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
         // the following is only used when we need to respond
         buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
-        switch((st_message_command_t)cmd) {
+        switch((st_message_command_t)res) {
             case CMD_ESP_IDF_VERSION: {
                 st_esp_idf_version_message_t msg;
                 if(-1<st_esp_idf_version_message_read(&msg,on_read_buffer,&read_cur)) {
