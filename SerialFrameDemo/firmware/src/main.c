@@ -9,7 +9,9 @@
 #include <memory.h>
 #include <stdio.h>
 #include "serial.h"
+#include "frame.h"
 #include "interface_buffers.h"
+static frame_handle_t frame_handle = NULL;
 static void loop();
 static void loop_task(void* arg) {
     TickType_t wdt_ts = xTaskGetTickCount();
@@ -22,8 +24,16 @@ static void loop_task(void* arg) {
         loop();
     }
 }
+int serial_read(void* state) {
+    return serial_getc();
+}
+int serial_write(uint8_t value, void* state) {
+    serial_putc(value);
+    return 1;
+}
 void app_main() {
-    serial_init(INTERFACE_MAX_SIZE);
+    serial_init(INTERFACE_MAX_SIZE+16);
+    frame_handle = frame_create(INTERFACE_MAX_SIZE,serial_read,NULL,serial_write,NULL);
     TaskHandle_t loop_handle;
     xTaskCreate(loop_task,"loop_task",8192,NULL,1,&loop_handle);
 }
@@ -55,11 +65,12 @@ int on_read_buffer(void* state) {
 }
 static void loop() {
     static uint8_t msg_buffer[INTERFACE_MAX_SIZE];
-    serial_update();
     uint8_t cmd;
     void* ptr;
     size_t length;
-    if(serial_try_get_frame(&cmd,&ptr,&length)) {
+    int res = frame_get(frame_handle,&ptr,&length);
+    if(res>0) {
+        cmd = res;
         buffer_read_cursor_t read_cur = {(const uint8_t*)ptr,length};
         // the following is only used when we need to respond
         buffer_write_cursor_t write_cur = {msg_buffer,INTERFACE_MAX_SIZE};
@@ -75,7 +86,7 @@ static void loop() {
                     resp.minor = ESP_IDF_VERSION_MINOR;
                     resp.patch = ESP_IDF_VERSION_PATCH;
                     int count = st_esp_idf_version_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,count);
+                    frame_put(frame_handle,CMD_ESP_IDF_VERSION_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -86,7 +97,7 @@ static void loop() {
                     st_rng_response_message_t resp;
                     resp.value = esp_random();
                     int count = st_rng_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_RNG_RESPONSE,msg_buffer,count);
+                    frame_put(frame_handle,CMD_RNG_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -105,7 +116,7 @@ static void loop() {
                     st_gpio_get_response_message_t resp;
                     resp.values = result;
                     int count = st_gpio_get_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_GPIO_GET_RESPONSE,msg_buffer,count);
+                    frame_put(frame_handle,CMD_GPIO_GET_RESPONSE,msg_buffer,count);
                 }
             }
             break;
@@ -157,13 +168,12 @@ static void loop() {
                     memset(&resp,0,sizeof(resp));
                     esp_read_mac(resp.address,ESP_MAC_BASE);
                     int count = st_mac_address_response_message_write(&resp,on_write_buffer,&write_cur);
-                    serial_put_frame(CMD_MAC_ADDRESS_RESPONSE,msg_buffer,count);
+                    frame_put(frame_handle, CMD_MAC_ADDRESS_RESPONSE,msg_buffer,count);
                 }
             }
             break;
             default: {
-                printf("Unknown command received %d\n",(int)cmd);
-                serial_discard_frame();
+                printf("Unknown command received %d\n",res);
             }
             break;
         }
