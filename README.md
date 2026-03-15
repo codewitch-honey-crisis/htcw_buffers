@@ -14,7 +14,7 @@ You'll need python installed to run the scripts.
 
 Any shared code can be produced by the scripts so you don't need to reference any runtimes.
 
-By default strings and arrays are prefixed with a length, and then only that number of elements are sent. If `--fixed` is indicated, no length is indicated, and the total number of elements in the array or string are always sent.
+By default strings are prefixed with a length, and then only that number of characters up to the terminating `\0` are sent. If `--fixed` is indicated, no length is indicated, and the total number of characters in the string are always sent.
 
 ### Why not protobuf?
 
