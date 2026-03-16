@@ -34,6 +34,7 @@ Options:
 - `--big-endian` generate big endian wire format (defaults little endian)
 - `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
 - `--out <dir>` override the output directory
+- `--out_h <dir>` override the header output directory (defaults to output directory)
 - `--prefix <prefix>` use the given prefix on generated method and define code.
 ```
 python .\buffers_gen_c.py --buffers example.h

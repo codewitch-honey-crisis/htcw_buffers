@@ -1179,6 +1179,7 @@ def main():
     args = sys.argv[1:]
     gen_buffers = False
     out_dir = ""
+    out_h_dir = ""
     user_prefix = ""
     fixed_mode = False  # Default: variable-length (length-prefixed) serialization
     big_endian = False
@@ -1190,6 +1191,10 @@ def main():
             if not args:
                 error("--out requires an argument")
             out_dir = args.pop(0)
+        elif opt == '--out_h':
+            if not args:
+                error("--out_h requires an argument")
+            out_h_dir = args.pop(0)
         elif opt == '--prefix':
             if not args:
                 error("--prefix requires an argument")
@@ -1202,7 +1207,7 @@ def main():
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--buffers] [--out <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
+        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--buffers] [--out <dir>] [--out_h <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
         sys.exit(1)
 
     endian_suffix = "_be" if big_endian else "_le"
@@ -1222,8 +1227,10 @@ def main():
 
     if len(out_dir) == 0:
         out_dir = os.path.dirname(path) or '.'
-
-    h_path = os.path.join(out_dir, f"{stem}_buffers.h")
+    if len(out_h_dir) == 0:
+        out_h_dir = out_dir
+    
+    h_path = os.path.join(out_h_dir, f"{stem}_buffers.h")
     c_path = os.path.join(out_dir, f"{stem}_buffers.c")
 
     with open(h_path, 'w') as f:
@@ -1235,7 +1242,7 @@ def main():
     print(f"Written: {c_path}")
 
     if gen_buffers:
-        bh_path = os.path.join(out_dir, "buffers.h")
+        bh_path = os.path.join(out_h_dir, "buffers.h")
         bc_path = os.path.join(out_dir, "buffers.c")
         with open(bh_path, 'w') as f:
             f.write(BUFFERS_H_CONTENT.lstrip('\n'))
