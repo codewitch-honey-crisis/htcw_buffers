@@ -6,9 +6,9 @@ buffers_gen_cs.py - Parse wire structs from a C header and generate
 Usage: python buffers_gen_cs.py [options] <header.h>
 
 Options:
-  --fixed            Use fixed-size serialization for arrays and strings
+  --fixed            Use fixed-size serialization for strings
                     (transmit entire declared size). Without this flag,
-                    arrays/strings are length-prefixed on the wire.
+                    strings are length-prefixed on the wire.
   --big-endian      Generate struct read/write methods using big-endian
                     serialization. Without this flag, little-endian is used.
   --namespace <Ns>   File-scoped namespace for generated code (default: none)

@@ -6,9 +6,9 @@ buffers_gen_c.py - Parse wire structs from a C header and generate
 Usage: python buffers_gen_c.py [--fixed] [--big-endian] [--prefix <pfx>] [--buffers] [--out <dir>] [--out_h <dir>] <header.h>
 
 Options:
-  --fixed           Use fixed-size serialization for arrays and strings
+  --fixed           Use fixed-size serialization for strings
                    (transmit entire declared size). Without this flag,
-                   arrays/strings are length-prefixed on the wire.
+                   strings are length-prefixed on the wire.
   --big-endian     Generate struct read/write functions using big-endian
                    serialization. Without this flag, little-endian is used.
   --prefix <pfx>   Prepend <pfx> to every generated function name and
