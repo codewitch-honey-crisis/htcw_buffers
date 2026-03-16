@@ -67,6 +67,17 @@ int buffers_read_int32_t_be (int32_t*  result, buffers_read_callback_t cb, void*
 int buffers_read_int64_t_be (int64_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_read_float_be   (float*    result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_read_double_be  (double*   result, buffers_read_callback_t cb, void* state, int* bytes_read);
+/* aliases */
+int buffers_read_short_be         (short*              result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_short_be(unsigned short*     result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int_be           (int*                result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_int_be  (unsigned int*       result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_be          (long*               result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_be (unsigned long*      result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_long_be         (long long*          result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_long_be(unsigned long long* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_wchar_t_be       (wchar_t*            result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_size_t_be        (size_t*             result, buffers_read_callback_t cb, void* state, int* bytes_read);
 
 /* -------------------------------------------------------------------------
  * Write functions - little-endian (_le variants)
@@ -102,6 +113,17 @@ int buffers_write_int32_t_be (int32_t  value, buffers_write_callback_t cb, void*
 int buffers_write_int64_t_be (int64_t  value, buffers_write_callback_t cb, void* state);
 int buffers_write_float_be   (float    value, buffers_write_callback_t cb, void* state);
 int buffers_write_double_be  (double   value, buffers_write_callback_t cb, void* state);
+/* aliases */
+int buffers_write_short_be         (short              value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_short_be(unsigned short     value, buffers_write_callback_t cb, void* state);
+int buffers_write_int_be           (int                value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_int_be  (unsigned int       value, buffers_write_callback_t cb, void* state);
+int buffers_write_long_be          (long               value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_long_be (unsigned long      value, buffers_write_callback_t cb, void* state);
+int buffers_write_long_long_be         (long long          value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_long_long_be(unsigned long long value, buffers_write_callback_t cb, void* state);
+int buffers_write_wchar_t_be       (wchar_t            value, buffers_write_callback_t cb, void* state);
+int buffers_write_size_t_be        (size_t             value, buffers_write_callback_t cb, void* state);
 
 #ifdef __cplusplus
 }

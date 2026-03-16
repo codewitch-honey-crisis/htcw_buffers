@@ -746,6 +746,17 @@ int buffers_read_int32_t_be (int32_t*  result, buffers_read_callback_t cb, void*
 int buffers_read_int64_t_be (int64_t*  result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_read_float_be   (float*    result, buffers_read_callback_t cb, void* state, int* bytes_read);
 int buffers_read_double_be  (double*   result, buffers_read_callback_t cb, void* state, int* bytes_read);
+/* aliases */
+int buffers_read_short_be         (short*              result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_short_be(unsigned short*     result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_int_be           (int*                result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_int_be  (unsigned int*       result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_be          (long*               result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_be (unsigned long*      result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_long_long_be         (long long*          result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_unsigned_long_long_be(unsigned long long* result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_wchar_t_be       (wchar_t*            result, buffers_read_callback_t cb, void* state, int* bytes_read);
+int buffers_read_size_t_be        (size_t*             result, buffers_read_callback_t cb, void* state, int* bytes_read);
 
 /* -------------------------------------------------------------------------
  * Write functions - little-endian (_le variants)
@@ -781,6 +792,17 @@ int buffers_write_int32_t_be (int32_t  value, buffers_write_callback_t cb, void*
 int buffers_write_int64_t_be (int64_t  value, buffers_write_callback_t cb, void* state);
 int buffers_write_float_be   (float    value, buffers_write_callback_t cb, void* state);
 int buffers_write_double_be  (double   value, buffers_write_callback_t cb, void* state);
+/* aliases */
+int buffers_write_short_be         (short              value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_short_be(unsigned short     value, buffers_write_callback_t cb, void* state);
+int buffers_write_int_be           (int                value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_int_be  (unsigned int       value, buffers_write_callback_t cb, void* state);
+int buffers_write_long_be          (long               value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_long_be (unsigned long      value, buffers_write_callback_t cb, void* state);
+int buffers_write_long_long_be         (long long          value, buffers_write_callback_t cb, void* state);
+int buffers_write_unsigned_long_long_be(unsigned long long value, buffers_write_callback_t cb, void* state);
+int buffers_write_wchar_t_be       (wchar_t            value, buffers_write_callback_t cb, void* state);
+int buffers_write_size_t_be        (size_t             value, buffers_write_callback_t cb, void* state);
 
 #ifdef __cplusplus
 }
@@ -1096,6 +1118,60 @@ int buffers_read_size_t_le(size_t* r, buffers_read_callback_t cb, void* s, int* 
     *r = (size_t)tmp; return 0; }
 int buffers_write_size_t_le(size_t v, buffers_write_callback_t cb, void* s) {
     return buffers_write_uint32_t_le((uint32_t)v, cb, s); }
+
+/* -------------------------------------------------------------------------
+ * Big-endian aliases
+ * ------------------------------------------------------------------------- */
+int buffers_read_short_be(short* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int16_t_be((int16_t*)r, cb, s, bytes_read); }
+int buffers_write_short_be(short v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int16_t_be((int16_t)v, cb, s); }
+
+int buffers_read_unsigned_short_be(unsigned short* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint16_t_be((uint16_t*)r, cb, s, bytes_read); }
+int buffers_write_unsigned_short_be(unsigned short v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint16_t_be((uint16_t)v, cb, s); }
+
+int buffers_read_int_be(int* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int32_t_be((int32_t*)r, cb, s, bytes_read); }
+int buffers_write_int_be(int v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int32_t_be((int32_t)v, cb, s); }
+
+int buffers_read_unsigned_int_be(unsigned int* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint32_t_be((uint32_t*)r, cb, s, bytes_read); }
+int buffers_write_unsigned_int_be(unsigned int v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_be((uint32_t)v, cb, s); }
+
+int buffers_read_long_be(long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int32_t_be((int32_t*)r, cb, s, bytes_read); }
+int buffers_write_long_be(long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int32_t_be((int32_t)v, cb, s); }
+
+int buffers_read_unsigned_long_be(unsigned long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint32_t_be((uint32_t*)r, cb, s, bytes_read); }
+int buffers_write_unsigned_long_be(unsigned long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_be((uint32_t)v, cb, s); }
+
+int buffers_read_long_long_be(long long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int64_t_be((int64_t*)r, cb, s, bytes_read); }
+int buffers_write_long_long_be(long long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int64_t_be((int64_t)v, cb, s); }
+
+int buffers_read_unsigned_long_long_be(unsigned long long* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_uint64_t_be((uint64_t*)r, cb, s, bytes_read); }
+int buffers_write_unsigned_long_long_be(unsigned long long v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint64_t_be((uint64_t)v, cb, s); }
+
+int buffers_read_wchar_t_be(wchar_t* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    return buffers_read_int16_t_be((int16_t*)r, cb, s, bytes_read); }
+int buffers_write_wchar_t_be(wchar_t v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_int16_t_be((int16_t)v, cb, s); }
+
+int buffers_read_size_t_be(size_t* r, buffers_read_callback_t cb, void* s, int* bytes_read) {
+    uint32_t tmp; int res = buffers_read_uint32_t_be(&tmp, cb, s, bytes_read); if (res < 0) return res;
+    *r = (size_t)tmp; return 0; }
+int buffers_write_size_t_be(size_t v, buffers_write_callback_t cb, void* s) {
+    return buffers_write_uint32_t_be((uint32_t)v, cb, s); }
 """
 
 

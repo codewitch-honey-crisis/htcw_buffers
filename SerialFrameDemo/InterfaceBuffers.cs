@@ -164,7 +164,7 @@ partial class STGpioGetMessage
         result = new STGpioGetMessage();
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
         offset += 8;
         bytesRead = offset;
         return true;
@@ -175,7 +175,7 @@ partial class STGpioGetMessage
         bytesWritten = 0;
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), Mask);
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), Mask);
         offset += 8;
         bytesWritten = offset;
         return true;
@@ -233,10 +233,10 @@ partial class STGpioSetMessage
         result = new STGpioSetMessage();
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        result.Mask = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        result.Mask = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
         offset += 8;
         if (span.Length - offset < 8) return false;
-        result.Values = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        result.Values = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
         offset += 8;
         bytesRead = offset;
         return true;
@@ -247,10 +247,10 @@ partial class STGpioSetMessage
         bytesWritten = 0;
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), Mask);
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), Mask);
         offset += 8;
         if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), Values);
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), Values);
         offset += 8;
         bytesWritten = offset;
         return true;
@@ -520,7 +520,7 @@ partial class STRngResponseMessage
         result = new STRngResponseMessage();
         int offset = 0;
         if (span.Length - offset < 4) return false;
-        result.Value = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset));
+        result.Value = BinaryPrimitives.ReadUInt32BigEndian(span.Slice(offset));
         offset += 4;
         bytesRead = offset;
         return true;
@@ -531,7 +531,7 @@ partial class STRngResponseMessage
         bytesWritten = 0;
         int offset = 0;
         if (span.Length - offset < 4) return false;
-        BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(offset), Value);
+        BinaryPrimitives.WriteUInt32BigEndian(span.Slice(offset), Value);
         offset += 4;
         bytesWritten = offset;
         return true;
@@ -587,7 +587,7 @@ partial class STGpioGetResponseMessage
         result = new STGpioGetResponseMessage();
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        result.Values = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset));
+        result.Values = BinaryPrimitives.ReadUInt64BigEndian(span.Slice(offset));
         offset += 8;
         bytesRead = offset;
         return true;
@@ -598,7 +598,7 @@ partial class STGpioGetResponseMessage
         bytesWritten = 0;
         int offset = 0;
         if (span.Length - offset < 8) return false;
-        BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset), Values);
+        BinaryPrimitives.WriteUInt64BigEndian(span.Slice(offset), Values);
         offset += 8;
         bytesWritten = offset;
         return true;

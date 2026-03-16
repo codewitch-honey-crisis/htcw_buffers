@@ -611,11 +611,14 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{indent}}}")
 
         elif arr is not None and is_wchar_array(f):
+            decode_func = "Buffers.DecodeUtf16BE" if big_endian else "Buffers.DecodeUtf16LE"
+            encoding_class = "Encoding.BigEndianUnicode" if big_endian else "Encoding.Unicode"
+            endian_label = "UTF-16BE" if big_endian else "UTF-16LE"
             if fixed_mode:
-                # UTF-16LE string: read arr*2 bytes, decode
+                # Fixed-width string: read arr*2 bytes, decode
                 byte_count = arr * 2
                 lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-                lines.append(f"{indent}result.{cs_field} = Buffers.DecodeUtf16LE(span.Slice(offset, {byte_count}));")
+                lines.append(f"{indent}result.{cs_field} = {decode_func}(span.Slice(offset, {byte_count}));")
                 lines.append(f"{indent}offset += {byte_count};")
             else:
                 # Variable: length prefix is count of wchar_t elements, each 2 bytes on wire
@@ -628,7 +631,7 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}offset += {lp_sz};")
                 lines.append(f"{inner}int _byteLen_{cs_field} = _len_{cs_field} * 2;")
                 lines.append(f"{inner}if (_len_{cs_field} > {arr} || span.Length - offset < _byteLen_{cs_field}) return false;")
-                lines.append(f"{inner}result.{cs_field} = Encoding.Unicode.GetString(span.Slice(offset, _byteLen_{cs_field}));")
+                lines.append(f"{inner}result.{cs_field} = {encoding_class}.GetString(span.Slice(offset, _byteLen_{cs_field}));")
                 lines.append(f"{inner}offset += _byteLen_{cs_field};")
                 lines.append(f"{indent}}}")
 
@@ -746,11 +749,13 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{indent}}}")
 
         elif arr is not None and is_wchar_array(f):
+            encode_func = "Buffers.EncodeUtf16BE" if big_endian else "Buffers.EncodeUtf16LE"
+            encoding_class = "Encoding.BigEndianUnicode" if big_endian else "Encoding.Unicode"
             if fixed_mode:
-                # UTF-16LE string
+                # Fixed-width UTF-16 string
                 byte_count = arr * 2
                 lines.append(f"{indent}if (span.Length - offset < {byte_count}) return false;")
-                lines.append(f"{indent}Buffers.EncodeUtf16LE({cs_field}, span.Slice(offset, {byte_count}));")
+                lines.append(f"{indent}{encode_func}({cs_field}, span.Slice(offset, {byte_count}));")
                 lines.append(f"{indent}offset += {byte_count};")
             else:
                 # Variable: length prefix is element count (wchar_t), each 2 bytes
@@ -766,7 +771,7 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
                 lines.append(f"{inner}offset += {lp_sz};")
                 lines.append(f"{inner}if (_byteLen_{cs_field} > 0)")
                 lines.append(f"{inner}{{")
-                lines.append(f"{inner2}Encoding.Unicode.GetBytes({cs_field}.AsSpan(0, _charLen_{cs_field}), span.Slice(offset, _byteLen_{cs_field}));")
+                lines.append(f"{inner2}{encoding_class}.GetBytes({cs_field}.AsSpan(0, _charLen_{cs_field}), span.Slice(offset, _byteLen_{cs_field}));")
                 lines.append(f"{inner2}offset += _byteLen_{cs_field};")
                 lines.append(f"{inner}}}")
                 lines.append(f"{indent}}}")
@@ -1175,6 +1180,37 @@ internal static class Buffers
         dest.Clear();
         if (string.IsNullOrEmpty(value)) return;
         var encoder = Encoding.Unicode.GetEncoder();
+        var chars = value.AsSpan();
+        encoder.Convert(chars, dest, flush: true,
+            out int charsUsed, out int bytesUsed, out bool completed);
+    }
+
+    /// <summary>
+    /// Decode a fixed-length UTF-16BE byte field into a string.
+    /// Strips everything at and after the first null char (0x0000).
+    /// </summary>
+    internal static string DecodeUtf16BE(ReadOnlySpan<byte> span)
+    {
+        // Find first null char (two zero bytes aligned on even boundary)
+        // In BE, the high byte comes first: [0x00, 0x00] = null
+        int len = span.Length & ~1; // round down to even
+        for (int i = 0; i < len; i += 2)
+        {
+            if (span[i] == 0 && span[i + 1] == 0) { len = i; break; }
+        }
+        return Encoding.BigEndianUnicode.GetString(span.Slice(0, len));
+    }
+
+    /// <summary>
+    /// Encode a string as UTF-16BE into a fixed-length span, zero-padded.
+    /// Uses Encoder.Convert to guarantee truncation on a valid code-unit
+    /// boundary - surrogate pairs are never split.
+    /// </summary>
+    internal static void EncodeUtf16BE(string value, Span<byte> dest)
+    {
+        dest.Clear();
+        if (string.IsNullOrEmpty(value)) return;
+        var encoder = Encoding.BigEndianUnicode.GetEncoder();
         var chars = value.AsSpan();
         encoder.Convert(chars, dest, flush: true,
             out int charsUsed, out int bytesUsed, out bool completed);
