@@ -4,3 +4,7 @@ SerialFrameDemo/.vs/*
 SerialFrameDemo/bin/*
 SerialFrameDemo/obj/*
 SerialFrameDemo/firmware/.vscode/settings.json
+SerialFrameDemo/firmware/include/buffers.h
+SerialFrameDemo/firmware/include/interface_buffers.h
+SerialFrameDemo/firmware/src/buffers.c
+SerialFrameDemo/firmware/src/interface_buffers.c
