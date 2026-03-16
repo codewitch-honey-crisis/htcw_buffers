@@ -15,6 +15,7 @@ Options:
                    per-struct #define (not to the MAX_SIZE define).
   --buffers        Also emit buffers.h / buffers.c support files.
   --out <dir>      Directory for generated files (default: same as input).
+  --out_h <dir>    Directory for generated header files (default: same as output).
 
 Outputs:
   <stem>_buffers.h   - declarations for all read/write functions
@@ -25,6 +26,30 @@ Function naming:
   - struct name precedes _read / _write (no LE/BE suffix)
   - e.g. example_data_message_t -> [prefix]example_data_message_read / [prefix]example_data_message_write
   - The shared buffers.h/.c functions use _le and _be suffixes
+"""
+
+"""
+MIT License
+
+Copyright (c) 2026 honey the codewitch
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
 
 import os
