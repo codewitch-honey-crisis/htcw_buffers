@@ -103,10 +103,11 @@ static void loop() {
                 uint64_t result = 0;
                 if (-1 < st_gpio_get_message_read(&msg, on_read_buffer, &read_cur)) {
                     for (int i = 0; i < 64; ++i) {
-                        if (0 != (msg.mask & (((uint64_t)1) << i))) {
+                        const uint64_t mask_cmp = (((uint64_t)1) << i);
+                        if (0 != (msg.mask & mask_cmp)) {
                             printf("GPIO get request for %d\n", (int)i);
                             if (gpio_get_level((gpio_num_t)i)) {
-                                result |= (((uint64_t)1) << i);
+                                result |= mask_cmp;
                             }
                         }
                     }
@@ -120,9 +121,10 @@ static void loop() {
                 st_gpio_set_message_t msg;
                 if (-1 < st_gpio_set_message_read(&msg, on_read_buffer, &read_cur)) {
                     for (int i = 0; i < 64; ++i) {
-                        if (0 != (msg.mask & (((uint64_t)1) << i))) {
+                        const uint64_t mask_cmp = (((uint64_t)1) << i);
+                        if (0 != (msg.mask & mask_cmp)) {
                             printf("GPIO set level request for %d\n", (int)i);
-                            gpio_set_level((gpio_num_t)i, !!(msg.values & (((uint64_t)1) << i)));
+                            gpio_set_level((gpio_num_t)i, !!(msg.values & mask_cmp));
                         }
                     }
                 }
