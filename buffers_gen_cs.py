@@ -3,7 +3,7 @@
 buffers_gen_cs.py - Parse wire structs from a C header and generate
                     C# read/write methods for each struct.
 
-Usage: python buffers_gen_cs.py [options] <header.h>
+Usage: python buffers_gen_cs.py [--fixed] [--big-endian] [--namespace <ns>] [--public] [--out <dir>] <header.h>
 
 Options:
   --fixed            Use fixed-size serialization for strings
@@ -11,9 +11,10 @@ Options:
                     strings are length-prefixed on the wire.
   --big-endian      Generate struct read/write methods using big-endian
                     serialization. Without this flag, little-endian is used.
-  --namespace <Ns>   File-scoped namespace for generated code (default: none)
+  --namespace <ns>   File-scoped namespace for generated code (default: none)
   --public           Emit public visibility (default: implicit internal)
-
+  --out <dir>        Overrides the output directory (default: input directory)
+  
 Outputs:
   <StemName>Buffers.cs  - partial structs + enums with TryRead/TryWrite
   Buffers.cs            - shared supporting code (namespace Htcw)
