@@ -70,9 +70,9 @@ internal class Program
                         break;
                     case "RESET":
                         {
-                            STResetMessage rng = new STResetMessage();
+                            STResetMessage rst = new STResetMessage();
 
-                            if (rng.TryWrite(buffer, out bytesWritten))
+                            if (rst.TryWrite(buffer, out bytesWritten))
                             {
                                 session.Send((byte)STMessageCommand.CmdReset, buffer.AsSpan(0, bytesWritten));
                             }
