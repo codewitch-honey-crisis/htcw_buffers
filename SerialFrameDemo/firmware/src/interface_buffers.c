@@ -44,6 +44,21 @@ size_t st_rng_message_size(const st_rng_message_t* s) {
     return 0;
 }
 
+int st_reset_message_read(st_reset_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
+    (void)s; (void)on_read; (void)on_read_state;
+    return 0;
+}
+
+int st_reset_message_write(const st_reset_message_t* s, buffers_write_callback_t on_write, void* on_write_state) {
+    (void)s; (void)on_write; (void)on_write_state;
+    return 0;
+}
+
+size_t st_reset_message_size(const st_reset_message_t* s) {
+    (void)s;
+    return 0;
+}
+
 int st_gpio_get_message_read(st_gpio_get_message_t* s, buffers_read_callback_t on_read, void* on_read_state) {
     int res;
     int bytes_read = 0;

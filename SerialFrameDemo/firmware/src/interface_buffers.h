@@ -6,6 +6,7 @@
 #define INTERFACE_MAX_SIZE (68)
 #define ST_ESP_IDF_VERSION_MESSAGE_SIZE (0)
 #define ST_RNG_MESSAGE_SIZE (0)
+#define ST_RESET_MESSAGE_SIZE (0)
 #define ST_GPIO_GET_MESSAGE_SIZE (8)
 #define ST_GPIO_SET_MESSAGE_SIZE (16)
 #define ST_GPIO_MODE_MESSAGE_SIZE (2)
@@ -26,6 +27,10 @@ size_t st_esp_idf_version_message_size(const st_esp_idf_version_message_t* s);
 int st_rng_message_read(st_rng_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
 int st_rng_message_write(const st_rng_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
 size_t st_rng_message_size(const st_rng_message_t* s);
+
+int st_reset_message_read(st_reset_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
+int st_reset_message_write(const st_reset_message_t* s, buffers_write_callback_t on_write, void* on_write_state);
+size_t st_reset_message_size(const st_reset_message_t* s);
 
 int st_gpio_get_message_read(st_gpio_get_message_t* s, buffers_read_callback_t on_read, void* on_read_state);
 int st_gpio_get_message_write(const st_gpio_get_message_t* s, buffers_write_callback_t on_write, void* on_write_state);

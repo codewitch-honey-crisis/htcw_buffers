@@ -68,6 +68,16 @@ internal class Program
                             }
                         }
                         break;
+                    case "RESET":
+                        {
+                            STResetMessage rng = new STResetMessage();
+
+                            if (rng.TryWrite(buffer, out bytesWritten))
+                            {
+                                session.Send((byte)STMessageCommand.CmdReset, buffer.AsSpan(0, bytesWritten));
+                            }
+                        }
+                        break;
                     case "GPIO":
                         {
                             switch (sa.Length)
@@ -225,6 +235,8 @@ internal class Program
                         Console.Error.WriteLine("VERSION  Gets the ESP-IDF Version");
                         Console.Error.WriteLine();
                         Console.Error.WriteLine("RANDOM   Gets a value from the ESP32 hardware RNG");
+                        Console.Error.WriteLine();
+                        Console.Error.WriteLine("RESET    Resets the ESP32");
                         Console.Error.WriteLine();
                         Console.Error.WriteLine("GPIO     Gets or sets the GPIO level and mode");
                         Console.Error.WriteLine("    GPIO <pin number> retrieves the current level");

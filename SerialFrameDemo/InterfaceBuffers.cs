@@ -15,14 +15,15 @@ enum STMessageCommand : byte
     CmdNone = 0,
     CmdEspIdfVersion = 1,
     CmdRng = 2,
-    CmdGpioMode = 3,
-    CmdGpioGet = 4,
-    CmdGpioSet = 5,
-    CmdMacAddress = 6,
-    CmdEspIdfVersionResponse = 7,
-    CmdRngResponse = 8,
-    CmdGpioGetResponse = 9,
-    CmdMacAddressResponse = 10,
+    CmdReset = 3,
+    CmdGpioMode = 4,
+    CmdGpioGet = 5,
+    CmdGpioSet = 6,
+    CmdMacAddress = 7,
+    CmdEspIdfVersionResponse = 8,
+    CmdRngResponse = 9,
+    CmdGpioGetResponse = 10,
+    CmdMacAddressResponse = 11,
 }
 
 enum STGpioMode : byte
@@ -95,6 +96,40 @@ partial class STRngMessage
     internal static bool TryRead(Stream stream, out STRngMessage result, out int bytesRead)
     {
         result = new STRngMessage();
+        bytesRead = 0;
+        return true;
+    }
+
+    internal bool TryWrite(Stream stream, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        return true;
+    }
+
+}
+
+partial class STResetMessage
+{
+    internal const int StructMaxSize = 0;
+
+    internal int SizeOfStruct => 0;
+
+    internal static bool TryRead(ReadOnlySpan<byte> span, out STResetMessage result, out int bytesRead)
+    {
+        result = new STResetMessage();
+        bytesRead = 0;
+        return true;
+    }
+
+    internal bool TryWrite(Span<byte> destination, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        return true;
+    }
+
+    internal static bool TryRead(Stream stream, out STResetMessage result, out int bytesRead)
+    {
+        result = new STResetMessage();
         bytesRead = 0;
         return true;
     }

@@ -12,6 +12,7 @@ typedef enum {
     CMD_NONE,
     CMD_ESP_IDF_VERSION,
     CMD_RNG,
+    CMD_RESET,
     CMD_GPIO_MODE,
     CMD_GPIO_GET,
     CMD_GPIO_SET,
@@ -35,6 +36,9 @@ typedef struct {
 
 typedef struct {
 } st_rng_message_t;
+
+typedef struct {
+} st_reset_message_t;
 
 typedef struct {
     uint64_t mask;

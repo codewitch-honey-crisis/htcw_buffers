@@ -98,6 +98,13 @@ static void loop() {
                     frame_put(frame_handle, CMD_RNG_RESPONSE, msg_buffer, count);
                 }
             } break;
+            case CMD_RESET: {
+                st_reset_message_t msg;
+                if (-1 < st_reset_message_read(&msg, on_read_buffer, &read_cur)) {
+                    puts("Reset requested");
+                    esp_restart();
+                }
+            } break;
             case CMD_GPIO_GET: {
                 st_gpio_get_message_t msg;
                 uint64_t result = 0;
