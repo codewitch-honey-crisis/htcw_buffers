@@ -3,7 +3,7 @@
 buffers_gen_c.py - Parse wire structs from a C header and generate
                    read/write functions for each struct.
 
-Usage: python buffers_gen_c.py [--fixed] [--big-endian] [--prefix <pfx>] [--buffers] [--out <dir>] [--out_h <dir>] <header.h>
+Usage: python buffers_gen_c.py [--fixed] [--big-endian] [--lengths] [--prefix <pfx>] [--buffers] [--out <dir>] [--out_h <dir>] <header.h>
 
 Options:
   --fixed           Use fixed-size serialization for strings
@@ -11,6 +11,13 @@ Options:
                    strings are length-prefixed on the wire.
   --big-endian     Generate struct read/write functions using big-endian
                    serialization. Without this flag, little-endian is used.
+  --lengths        Treat any size_t field that immediately precedes a fixed
+                   array as the runtime element count for that array. The
+                   count is serialized first (as uint32_t on the wire), then
+                   only that many array elements follow. The fixed array's
+                   declared length is the maximum capacity. Strings (char[]
+                   / wchar_t[]) are unaffected. Mutually exclusive with
+                   --fixed.
   --prefix <pfx>   Prepend <pfx> to every generated function name and
                    per-struct #define (not to the MAX_SIZE define).
   --buffers        Also emit buffers.h / buffers.c support files.
@@ -313,6 +320,41 @@ def parse_struct_body(body, struct_name, all_struct_names, known_enums):
     return fields
 
 
+def apply_lengths_pairing(structs: dict, struct_name: str) -> None:
+    """When --lengths is in effect, find each pattern of:
+        size_t <name>;
+        <T> <arr>[N];   // any non-string fixed array
+    and pair them: the array gets `length_field` set to the count's name,
+    and the count gets `is_length_for` set to the array's name.
+
+    String fields (char[]/wchar_t[]) are excluded - they keep their existing
+    length-prefix behavior (driven by the null terminator). The size_t must
+    immediately precede the array. Pairing is consumed: a single size_t can
+    only pair with the field directly following it.
+    """
+    fields = structs[struct_name]['fields']
+    for i in range(len(fields) - 1):
+        cur = fields[i]
+        nxt = fields[i + 1]
+        # The count field must be a plain (non-array, non-enum, non-struct)
+        # field whose original C type is exactly 'size_t'. Strict by design.
+        if cur['array_len'] is not None:
+            continue
+        if cur['is_enum']:
+            continue
+        if cur['type'] != 'size_t':
+            continue
+        # The next field must be a fixed-length array, and not a string
+        # (strings already have their own length-prefix handling).
+        if nxt['array_len'] is None:
+            continue
+        if _field_is_string(nxt):
+            continue
+        # Pair them.
+        nxt['length_field'] = cur['name']
+        cur['is_length_for'] = nxt['name']
+
+
 # ---------------------------------------------------------------------------
 # Top-level struct extraction
 # ---------------------------------------------------------------------------
@@ -327,7 +369,7 @@ TYPEDEF_RE = re.compile(
 )
 
 
-def parse_header(text: str) -> dict:
+def parse_header(text: str, lengths_mode: bool = False) -> dict:
     text = strip_comments(text)
     text = strip_preprocessor(text)
 
@@ -354,6 +396,10 @@ def parse_header(text: str) -> dict:
                 error(f"Struct '{name}': duplicate field name '{f['name']}'")
             seen.add(f['name'])
         structs[name] = {"fields": fields}
+
+    if lengths_mode:
+        for name in structs:
+            apply_lengths_pairing(structs, name)
 
     return structs
 
@@ -480,7 +526,23 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
         for i, f in enumerate(fields):
             if f['array_len'] is not None:
                 is_string = _field_is_string(f)
-                if fixed_mode or not is_string:
+                length_field = f.get('length_field')
+                if length_field is not None:
+                    # --lengths pairing: write the count from s->length_field
+                    # (the count itself is also serialized here, since the count
+                    # field's own iteration is skipped below). Then write
+                    # exactly that many array elements.
+                    lines.append(f"    /* length-paired array: count is s->{length_field} */")
+                    lines.append(f"    if(s->{length_field} > {f['array_len']}) {{ return BUFFERS_ERROR_EOF; }}")
+                    # The size_t count maps to uint32_t on the wire.
+                    lines.append(f"    res = buffers_write_size_t{endian_suffix}(s->{length_field}, on_write, on_write_state);")
+                    lines.append(f"    if(res < 0) {{ return res; }}")
+                    lines.append(f"    total += res;")
+                    lines.append(f"    for(size_t i = 0; i < s->{length_field}; ++i) {{")
+                    stmts = gen_write_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ", endian_suffix=endian_suffix)
+                    lines.extend(stmts)
+                    lines.append("    }")
+                elif fixed_mode or not is_string:
                     # Fixed mode, or non-string array in variable mode:
                     # write all array_len elements with no length prefix
                     lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
@@ -508,6 +570,10 @@ def gen_write_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True,
                     lines.extend(stmts)
                     lines.append(f"        }}")
                     lines.append(f"    }}")
+            elif f.get('is_length_for') is not None:
+                # The count field is serialized as part of its paired array's
+                # write block above. Skip it here so it isn't written twice.
+                lines.append(f"    /* {f['name']}: length for {f['is_length_for']}, written with the array */")
             else:
                 stmts = gen_write_call(prefix, f, f"s->{f['name']}", all_struct_names, endian_suffix=endian_suffix)
                 lines.extend(stmts)
@@ -531,8 +597,24 @@ def gen_size_fn(prefix, struct_name, fields, all_struct_names):
         if f['array_len'] is not None:
             is_string = _field_is_string(f)
             wt = f['wire_type']
+            length_field = f.get('length_field')
 
-            if not is_string:
+            if length_field is not None:
+                # --lengths pairing: 4-byte count prefix + (count * elem size).
+                # The count's own 4 bytes are folded in here because the
+                # paired size_t field's iteration is skipped below.
+                if wt in all_struct_names:
+                    nested_size_fn = size_fn_name(prefix, wt)
+                    lines.append(f"    {{")
+                    lines.append(f"        size += 4; /* size_t count for {f['name']} */")
+                    lines.append(f"        for(size_t i = 0; i < s->{length_field}; ++i) {{")
+                    lines.append(f"            size += {nested_size_fn}(&s->{f['name']}[i]);")
+                    lines.append(f"        }}")
+                    lines.append(f"    }}")
+                else:
+                    elem_sz = WIRE_TYPE_SIZES.get(wt, 0)
+                    lines.append(f"    size += 4 + (size_t)s->{length_field} * {elem_sz}; /* count + elements for {f['name']} */")
+            elif not is_string:
                 # Non-string array: no length prefix, always full declared size
                 if wt in all_struct_names:
                     nested_size_fn = size_fn_name(prefix, wt)
@@ -561,6 +643,9 @@ def gen_size_fn(prefix, struct_name, fields, all_struct_names):
                 lines.append(f"        size += {lp_sz} + (size_t)_len * {elem_sz};")
                 lines.append(f"    }}")
         else:
+            if f.get('is_length_for') is not None:
+                # Counted by its paired array's size contribution above.
+                continue
             wt = f['wire_type']
             if wt in all_struct_names:
                 nested_size_fn = size_fn_name(prefix, wt)
@@ -597,7 +682,20 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
         for i, f in enumerate(fields):
             if f['array_len'] is not None:
                 is_string = _field_is_string(f)
-                if fixed_mode or not is_string:
+                length_field = f.get('length_field')
+                if length_field is not None:
+                    # --lengths pairing: read the count into s->length_field
+                    # (the count field's own iteration is skipped below).
+                    # Then read exactly that many array elements.
+                    lines.append(f"    /* length-paired array: count goes into s->{length_field} */")
+                    lines.append(f"    res = buffers_read_size_t{endian_suffix}(&s->{length_field}, on_read, on_read_state, &bytes_read);")
+                    lines.append(f"    if(res < 0) {{ return res; }}")
+                    lines.append(f"    if(s->{length_field} > {f['array_len']}) {{ return BUFFERS_ERROR_EOF; }}")
+                    lines.append(f"    for(size_t i = 0; i < s->{length_field}; ++i) {{")
+                    stmts = gen_read_call(prefix, f, f"s->{f['name']}[i]", all_struct_names, indent="        ", endian_suffix=endian_suffix)
+                    lines.extend(stmts)
+                    lines.append("    }")
+                elif fixed_mode or not is_string:
                     # Fixed mode, or non-string array in variable mode:
                     # read all array_len elements with no length prefix
                     lines.append(f"    for(int i = 0; i < {f['array_len']}; ++i) {{")
@@ -623,6 +721,10 @@ def gen_read_fn(prefix, struct_name, fields, all_struct_names, fixed_mode=True, 
                     lines.append(f"            s->{f['name']}[_len_{f['name']}] = {null_lit};")
                     lines.append(f"        }}")
                     lines.append(f"    }}")
+            elif f.get('is_length_for') is not None:
+                # The count field is read as part of its paired array's
+                # read block above. Skip it here so it isn't read twice.
+                lines.append(f"    /* {f['name']}: length for {f['is_length_for']}, read with the array */")
             else:
                 stmts = gen_read_call(prefix, f, f"s->{f['name']}", all_struct_names, endian_suffix=endian_suffix)
                 lines.extend(stmts)
@@ -1208,6 +1310,7 @@ def main():
     user_prefix = ""
     fixed_mode = False  # Default: variable-length (length-prefixed) serialization
     big_endian = False
+    lengths_mode = False
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--buffers':
@@ -1228,12 +1331,17 @@ def main():
             fixed_mode = True
         elif opt == '--big-endian':
             big_endian = True
+        elif opt == '--lengths':
+            lengths_mode = True
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--buffers] [--out <dir>] [--out_h <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
+        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--lengths] [--buffers] [--out <dir>] [--out_h <dir>] [--prefix <pfx>] <header.h>", file=sys.stderr)
         sys.exit(1)
+
+    if lengths_mode and fixed_mode:
+        error("--lengths and --fixed are mutually exclusive")
 
     endian_suffix = "_be" if big_endian else "_le"
 
@@ -1244,7 +1352,7 @@ def main():
     except OSError as e:
         error(f"Cannot open file: {e}")
 
-    structs = parse_header(text)
+    structs = parse_header(text, lengths_mode=lengths_mode)
     if not structs:
         error("No structs found in header")
 

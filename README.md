@@ -8,13 +8,15 @@ The structs can reference other structs in the file and can contain fixed size a
 
 The generated C code is fast, zero allocation, and flexible, allowing you to stream from and to arbitrary sources using custom callbacks
 
-The generated C# code is fairly efficient, but does allocate, leveraging the GC in order to give you a cleanly typed API. It also renames the definitions to follow dotnet naming guidelines, so `ip_address` becaomes `IPAddress`.
+The generated C# code is fairly efficient, but does allocate, leveraging the GC in order to give you a cleanly typed API. It also renames the definitions to follow dotnet naming guidelines, so `ip_address` becomes `IPAddress`.
 
 You'll need python installed to run the scripts.
 
 Any shared code can be produced by the scripts so you don't need to reference any runtimes.
 
 By default strings are prefixed with a length, and then only that number of characters up to the terminating `\0` are sent. If `--fixed` is indicated, no length is indicated, and the total number of characters in the string are always sent.
+
+Non-string fixed-size arrays are always sent at their full declared length. The `--lengths` option (see [Runtime-length arrays](#runtime-length-arrays) below) lets you opt specific arrays into runtime-sized serialization by pairing them with a preceding `size_t` count field.
 
 ### Why not protobuf?
 
@@ -33,6 +35,7 @@ Options:
 - `--buffers` generate shared code
 - `--big-endian` generate big endian wire format (defaults little endian)
 - `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
+- `--lengths` enable runtime-length arrays. When a struct has a `size_t` field that *immediately precedes* a fixed-size array, the count is treated as the actual number of elements in the array on the wire. See [Runtime-length arrays](#runtime-length-arrays) below. Mutually exclusive with `--fixed`.
 - `--out <dir>` override the output directory
 - `--out_h <dir>` override the header output directory (defaults to output directory)
 - `--prefix <prefix>` use the given prefix on generated method and define code.
@@ -45,6 +48,7 @@ Options:
 - `--buffers` generate shared code
 - `--big-endian` generate big endian wire format (defaults little endian)
 - `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
+- `--lengths` enable runtime-length arrays (see [Runtime-length arrays](#runtime-length-arrays)). Mutually exclusive with `--fixed`. On the C# side the `size_t` count field is *hidden* — it does not appear as a property; the count is taken from the array property's `.Length` / `.Count` on write and consumed (but discarded) on read.
 - `--public` generate public types
 - `--namespace <namespace>` generate under the indicated namespace
 - `--out <dir>` override the output directory
@@ -250,6 +254,72 @@ if(exMsg.TryWrite(buffer, out _)) {
 }
 ```
 Note that these serialization methods work with spans, byte arrays, or streams.
+
+## Runtime-length arrays
+
+By default, fixed-size arrays in your structs (other than strings) are always serialized at their full declared length. That's the right tradeoff most of the time — it keeps the wire format predictable and the code simple. But sometimes you have an array whose declared size is just a *cap*, and the actual number of valid elements varies per message.
+
+Passing `--lengths` to either generator turns on a small extension to the schema. When a struct has a `size_t` field that *immediately precedes* a fixed-size array, the generator pairs them: the `size_t` is treated as the runtime element count, and only that many elements appear on the wire.
+
+For example, this schema:
+```c
+typedef struct {
+    uint16_t id;
+    size_t   count;
+    uint8_t  bytes[256];
+} blob_message_t;
+```
+With `--lengths`, the wire format for a `blob_message_t` is:
+- `id` (2 bytes)
+- `count` (4 bytes — `size_t` is normalized to `uint32_t` on the wire regardless of platform)
+- `count` × 1 byte of `bytes`
+
+So a message with `count = 5` takes 11 bytes on the wire, not 262. The declared `[256]` is the maximum capacity, used for the `BLOB_MESSAGE_SIZE` / `StructMaxSize` constants and for the runtime bounds check during read/write.
+
+A few rules to keep the behavior predictable:
+
+- **It must be a `size_t`.** Other unsigned types like `uint32_t` or `uint16_t` won't trigger pairing, even though `size_t` happens to map to `uint32_t` on the wire. The strict match keeps the schema's intent obvious.
+- **It must immediately precede the array.** Any other field between them — even another scalar — and pairing is skipped. The `size_t` then just serializes as a normal `uint32_t`.
+- **Strings are unaffected.** `char[N]` and `wchar_t[N]` still use their existing length-prefix behavior driven by the null terminator.
+- **Each `size_t` pairs with at most one array.** A lonely `size_t` at the end of a struct, or a `size_t` followed by a string or scalar, just serializes as a regular field.
+- **Mutually exclusive with `--fixed`.** The two flags imply different things about the wire format; combining them errors out.
+- **The `MAX_SIZE` / `StructMaxSize` constants don't shrink.** They still reflect the worst case, so you can keep allocating fixed buffers the same way you did before.
+
+### C side
+
+The generated C struct is unchanged — both the `size_t` count and the array stay as ordinary fields. You populate `s->count` yourself before writing, and the read function fills it in for you on the way back. If you set `count` larger than the array's declared capacity, write returns `BUFFERS_ERROR_EOF`.
+
+```c
+blob_message_t out = {0};
+out.id = 0xBEEF;
+out.count = 5;
+for (size_t i = 0; i < 5; ++i) out.bytes[i] = (uint8_t)i;
+
+uint8_t buffer[BLOB_MESSAGE_SIZE];
+buffer_write_cursor_t cur = { buffer, sizeof(buffer) };
+if (-1 < blob_message_write(&out, on_write_buffer, &cur)) {
+    // 11 bytes written
+}
+```
+
+The `*_size()` runtime function returns the actual wire size of a populated instance, taking the runtime count into account.
+
+### C# side
+
+The C# API is rendered idiomatically: the `size_t` count field is **hidden** — it does not appear as a property. The count is taken from the array property's `.Length` (or `.Count` for `IList<T>` of nested structs) on write, and on read the count is consumed from the wire but discarded; the resulting array's length carries the information.
+
+```cs
+var msg = new BlobMessage {
+    ID = 0xBEEF,
+    Bytes = new byte[] { 0, 1, 2, 3, 4 }
+};
+var buf = new byte[BlobMessage.StructMaxSize];
+if (msg.TryWrite(buf, out int written)) {
+    // 11 bytes written; msg has no Count property to manage
+}
+```
+
+If the array is longer than the declared capacity, `TryWrite` returns `false`. A `null` array is treated as count zero on write; on read, an empty count produces a zero-length array (not `null`).
 
 ## The SerialFrameDemo example
 
