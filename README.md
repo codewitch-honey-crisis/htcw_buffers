@@ -18,6 +18,12 @@ By default strings are prefixed with a length, and then only that number of char
 
 Non-string fixed-size arrays are always sent at their full declared length. The `--lengths` option (see [Runtime-length arrays](#runtime-length-arrays) below) lets you opt specific arrays into runtime-sized serialization by pairing them with a preceding `size_t` count field.
 
+
+#### Disclaimer: 
+
+The JS code has not been field tested yet. That's coming shortly.
+
+
 ### Why not protobuf?
 
 Protobuf is kind of heavy for little devices, and even with nanopb the runtime has a significant footprint.
@@ -255,6 +261,62 @@ if(exMsg.TryWrite(buffer, out _)) {
 ```
 Note that these serialization methods work with spans, byte arrays, or streams.
 
+## JS code
+Options:
+- `--buffers` generate shared code
+- `--big-endian` generate big endian wire format (defaults little endian)
+- `--fixed` generate fixed size serialization/deserialization code. Note that fixed vs variable length is a change to the wire protocol.
+- `--lengths` enable runtime-length arrays (see [Runtime-length arrays](#runtime-length-arrays)). Mutually exclusive with `--fixed`. On the JS side the `size_t` count field is *hidden* — it does not appear as a property; the count is taken from the array property's `.length` on write and consumed (but discarded) on read.
+- `--out <dir>` override the output directory
+
+```
+python .\buffers_gen_js.py --buffers example.h
+```
+
+The JS generator targets modern browsers (and Node). It emits an ES module per header (`example_buffers.js`) plus a shared `buffers.js` (produced with `--buffers`) that the module imports for its string codecs. Everything is `import`/`export`; there are no runtime dependencies to reference.
+
+The JS API is exposed in a way that is idiomatic to JavaScript rather than mirroring C or .NET. A "struct" is just a plain object — you read one out and add properties to it at runtime. There are no classes and the objects carry no methods. Reading and writing are done with exported free functions, named after the type:
+- `<name>Read(u8, offset = 0, outBytesRead = null)` decodes a struct from a `Uint8Array`. It returns the decoded object, or `null` on failure (buffer too small, or a runtime count that exceeds capacity). If you pass an array as `outBytesRead`, `outBytesRead[0]` receives the number of bytes consumed.
+- `<name>Write(obj, u8, offset = 0)` encodes a struct into a `Uint8Array`. It returns the number of bytes written, or `-1` on failure. The optional `offset` lets you pack several messages into one buffer.
+- `<name>Size(obj)` returns the actual wire size of a populated object (not generated with `--fixed`).
+
+The C# generator renamed definitions to follow dotnet naming guidelines (`ip_address` becomes `IPAddress`). The JS generator does the analogous thing for JavaScript: identifiers become `camelCase`, so `ip_address` becomes `ipAddress`, `display_name` becomes `displayName`, and `mac_address` becomes `macAddress`. Because JavaScript has no two-letter-acronym convention, the casing is plain — `device_id` becomes `deviceId`, not `deviceID`. Enums are exported as frozen objects in `PascalCase` with `PascalCase` members, so `example_input_type_t` / `INPUT_TOUCH` becomes `ExampleInputType.InputTouch`. Per-struct size constants (`EXAMPLE_DATA_MESSAGE_SIZE`) and the module-wide maximum (`EXAMPLE_MAX_SIZE`) are exported as `SCREAMING_SNAKE_CASE` to match the C `#define`s.
+
+64-bit integer fields (`uint64_t` / `int64_t`) are surfaced as `BigInt`, since JS numbers can't represent the full 64-bit range exactly. Every smaller integer is a plain `number`. `bool` is a JS `boolean`.
+
+For example, to deserialize `example_data_message_t` from above:
+```js
+import { exampleDataMessageRead, EXAMPLE_MAX_SIZE } from './example_buffers.js';
+
+const buffer = new Uint8Array(EXAMPLE_MAX_SIZE);
+// at some point populate buffer above with data...
+const msg = exampleDataMessageRead(buffer);
+if (msg !== null) {
+    // msg is filled, e.g. msg.top.value1.value
+}
+```
+Serializing works like this:
+```js
+import { exampleDataMessageWrite, exampleDataMessageSize, EXAMPLE_MAX_SIZE } from './example_buffers.js';
+
+const buffer = new Uint8Array(EXAMPLE_MAX_SIZE);
+const msg = {};
+// populate msg with data...
+// you could have used exampleDataMessageSize(msg) to size the buffer to the
+// wire size of the populated struct instead of the max size of any struct.
+const written = exampleDataMessageWrite(msg, buffer);
+if (written >= 0) {
+    // the first `written` bytes of buffer are filled with the message
+}
+```
+The `offset` argument and the `outBytesRead` out-array make it easy to read or write a sequence of messages back-to-back over a single `Uint8Array`:
+```js
+const out = [0];
+const first = exampleModeMessageRead(buffer, 0, out);
+const second = exampleModeMessageRead(buffer, out[0], out);
+```
+
+
 ## Runtime-length arrays
 
 By default, fixed-size arrays in your structs (other than strings) are always serialized at their full declared length. That's the right tradeoff most of the time — it keeps the wire format predictable and the code simple. But sometimes you have an array whose declared size is just a *cap*, and the actual number of valid elements varies per message.
@@ -320,6 +382,26 @@ if (msg.TryWrite(buf, out int written)) {
 ```
 
 If the array is longer than the declared capacity, `TryWrite` returns `false`. A `null` array is treated as count zero on write; on read, an empty count produces a zero-length array (not `null`).
+
+### JS side
+
+The JS API is rendered idiomatically, the same way the C# one is: the `size_t` count field is **hidden** — it does not appear as a property. The count is taken from the array property's `.length` on write, and on read the count is consumed from the wire but discarded; the resulting array's length carries the information.
+
+```js
+import { blobMessageWrite, BLOB_MESSAGE_SIZE } from './blob_buffers.js';
+
+const msg = {
+    id: 0xBEEF,
+    bytes: [0, 1, 2, 3, 4]
+};
+const buf = new Uint8Array(BLOB_MESSAGE_SIZE);
+const written = blobMessageWrite(msg, buf);
+if (written >= 0) {
+    // 11 bytes written; msg has no count property to manage
+}
+```
+
+If the array is longer than the declared capacity, `blobMessageWrite` returns `-1`. A `null` or absent array is treated as count zero on write; on read, an empty count produces a zero-length array (not `null`). The `<name>Size()` function returns the actual wire size of a populated object, taking the runtime count into account.
 
 ## The SerialFrameDemo example
 
