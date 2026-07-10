@@ -32,12 +32,16 @@ buffers_gen_cs.py for the same flags.
 
 API (JS-idiomatic, plain objects - no classes):
   <name>Read(u8, offset = 0, outBytesRead = null) -> object | null
-      Decodes a struct from a Uint8Array. Returns the decoded plain object,
-      or null on failure (buffer too small, count exceeds capacity).
-      If outBytesRead is an array, outBytesRead[0] receives the bytes read.
+      Decodes a struct from a byte source. `u8` may be a Uint8Array, an
+      ArrayBuffer/SharedArrayBuffer, or any ArrayBuffer view (TypedArray or
+      DataView); non-Uint8Array inputs are wrapped in a zero-copy view. Returns
+      the decoded plain object, or null on failure (buffer too small, count
+      exceeds capacity). If outBytesRead is an array, outBytesRead[0] receives
+      the bytes read.
   <name>Write(obj, u8, offset = 0) -> number
-      Encodes a struct into a Uint8Array. Returns the number of bytes
-      written, or -1 on failure.
+      Encodes a struct into a byte destination. `u8` accepts the same input
+      types as Read; writing through the zero-copy view mutates the caller's
+      underlying buffer. Returns the number of bytes written, or -1 on failure.
   <name>Size(obj) -> number            (variable mode only)
       Returns the actual wire byte size of a populated object.
 
@@ -548,6 +552,7 @@ def gen_read_body(struct_name, info, structs, enums, big_endian, fixed_mode):
         L.append(f"{ind}return result;")
         return L
 
+    L.append(f"{ind}u8 = asBytes(u8);")
     L.append(f"{ind}const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);")
     L.append(f"{ind}const result = {{}};")
     L.append(f"{ind}let off = offset;")
@@ -712,6 +717,7 @@ def gen_write_body(struct_name, info, structs, enums, big_endian, fixed_mode):
         L.append(f"{ind}return 0;")
         return L
 
+    L.append(f"{ind}u8 = asBytes(u8);")
     L.append(f"{ind}const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);")
     L.append(f"{ind}let off = offset;")
 
@@ -952,6 +958,10 @@ def generate_js_module(header_path, structs, enums, fixed_mode, big_endian):
     imports = ["decodeUtf8", "decodeUtf16", "encodeUtf8Fixed", "encodeUtf16Fixed"]
     if not fixed_mode:
         imports += ["encodeUtf8Bounded", "utf8Bounded", "utf16Units", "encodeUtf16Into"]
+    # asBytes is used by every read/write body that touches the buffer (i.e. any
+    # struct with fields). Skip the import for modules of only empty structs.
+    if any(info['fields'] for info in structs.values()):
+        imports.insert(0, "asBytes")
     L.append(f"import {{ {', '.join(imports)} }} from './buffers.js';")
     L.append("")
 
@@ -1004,10 +1014,27 @@ export const BUFFERS_ERROR_EOF = -2;
 const _utf8Decoder = new TextDecoder('utf-8');
 const _utf8Encoder = new TextEncoder();
 
+// --- input normalization ----------------------------------------------------
+
+// Normalize any byte-source to a Uint8Array over the SAME memory. Never copies:
+// a Uint8Array is returned unchanged; an ArrayBuffer / SharedArrayBuffer, or any
+// ArrayBuffer view (a TypedArray or a DataView), is wrapped in a zero-copy view.
+// The view's own byteOffset is preserved, and the `offset` argument of the
+// read/write functions applies on top of it -- so a DataView at byteOffset 100
+// read with offset 8 addresses absolute byte 108.
+export function asBytes(b) {
+  if (b instanceof Uint8Array) return b;
+  if (ArrayBuffer.isView(b)) return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  if (b instanceof ArrayBuffer) return new Uint8Array(b);
+  if (typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer) return new Uint8Array(b);
+  throw new TypeError('asBytes: expected a Uint8Array, ArrayBuffer, typed array, or DataView');
+}
+
 // --- UTF-8 (char[]) ---------------------------------------------------------
 
 // Decode up to `max` bytes from u8 at off, stopping at the first NUL byte.
 export function decodeUtf8(u8, off, max) {
+  u8 = asBytes(u8);
   let end = off + max;
   for (let i = off; i < off + max; i++) {
     if (u8[i] === 0) { end = i; break; }
@@ -1035,6 +1062,7 @@ export function utf8Bounded(value, cap) {
 // Encode a string as UTF-8 into a fixed `cap`-byte field at off, zero-padded.
 // Truncates on a valid code-point boundary if necessary.
 export function encodeUtf8Fixed(value, u8, off, cap) {
+  u8 = asBytes(u8);
   u8.fill(0, off, off + cap);
   if (value == null || value.length === 0) return;
   const enc = encodeUtf8Bounded(value, cap);
@@ -1059,6 +1087,7 @@ export function utf16Units(value, cap) {
 // Decode `byteLen` bytes of UTF-16 (LE unless be) at off, stopping at the
 // first NUL code unit (0x0000).
 export function decodeUtf16(u8, off, byteLen, be) {
+  u8 = asBytes(u8);
   const units = byteLen >> 1;
   let count = units;
   for (let i = 0; i < units; i++) {
@@ -1079,6 +1108,7 @@ export function decodeUtf16(u8, off, byteLen, be) {
 
 // Write `units` UTF-16 code units of `value` into u8 at off (LE unless be).
 export function encodeUtf16Into(value, units, u8, off, be) {
+  u8 = asBytes(u8);
   for (let i = 0; i < units; i++) {
     const cu = value.charCodeAt(i);
     const hi = (cu >> 8) & 0xFF;
@@ -1091,6 +1121,7 @@ export function encodeUtf16Into(value, units, u8, off, be) {
 // Encode a string as UTF-16 into a fixed `cap`-unit field at off (cap*2 bytes),
 // zero-padded, never splitting a surrogate pair.
 export function encodeUtf16Fixed(value, u8, off, cap, be) {
+  u8 = asBytes(u8);
   const byteCap = cap * 2;
   u8.fill(0, off, off + byteCap);
   if (value == null || value.length === 0) return;

@@ -273,11 +273,11 @@ Options:
 python .\buffers_gen_js.py --buffers example.h
 ```
 
-The JS generator targets modern browsers (and Node). It emits an ES module per header (`example_buffers.js`) plus a shared `buffers.js` (produced with `--buffers`) that the module imports for its string codecs. Everything is `import`/`export`; there are no runtime dependencies to reference.
+The JS generator targets modern browsers (and Node). It emits an ES module per header (`example_buffers.js`) plus a shared `buffers.js` (produced with `--buffers`) that the module imports for its string codecs and the `asBytes` input normalizer. Everything is `import`/`export`; there are no runtime dependencies to reference.
 
 The JS API is exposed in a way that is idiomatic to JavaScript rather than mirroring C or .NET. A "struct" is just a plain object — you read one out and add properties to it at runtime. There are no classes and the objects carry no methods. Reading and writing are done with exported free functions, named after the type:
-- `<name>Read(u8, offset = 0, outBytesRead = null)` decodes a struct from a `Uint8Array`. It returns the decoded object, or `null` on failure (buffer too small, or a runtime count that exceeds capacity). If you pass an array as `outBytesRead`, `outBytesRead[0]` receives the number of bytes consumed.
-- `<name>Write(obj, u8, offset = 0)` encodes a struct into a `Uint8Array`. It returns the number of bytes written, or `-1` on failure. The optional `offset` lets you pack several messages into one buffer.
+- `<name>Read(u8, offset = 0, outBytesRead = null)` decodes a struct from a byte source. The first argument may be a `Uint8Array`, an `ArrayBuffer` (or `SharedArrayBuffer`), or any `ArrayBuffer` view such as a `DataView` or other typed array — anything that isn't already a `Uint8Array` is wrapped in a zero-copy view over the same memory, so nothing is copied even for large messages. It returns the decoded object, or `null` on failure (buffer too small, or a runtime count that exceeds capacity). If you pass an array as `outBytesRead`, `outBytesRead[0]` receives the number of bytes consumed.
+- `<name>Write(obj, u8, offset = 0)` encodes a struct into a byte destination. It accepts the same input types as `Read`; because the destination is wrapped in a zero-copy view, writing into an `ArrayBuffer` (or `DataView`, etc.) mutates that underlying buffer in place. It returns the number of bytes written, or `-1` on failure. The optional `offset` lets you pack several messages into one buffer.
 - `<name>Size(obj)` returns the actual wire size of a populated object (not generated with `--fixed`).
 
 The C# generator renamed definitions to follow dotnet naming guidelines (`ip_address` becomes `IPAddress`). The JS generator does the analogous thing for JavaScript: identifiers become `camelCase`, so `ip_address` becomes `ipAddress`, `display_name` becomes `displayName`, and `mac_address` becomes `macAddress`. Because JavaScript has no two-letter-acronym convention, the casing is plain — `device_id` becomes `deviceId`, not `deviceID`. Enums are exported as frozen objects in `PascalCase` with `PascalCase` members, so `example_input_type_t` / `INPUT_TOUCH` becomes `ExampleInputType.InputTouch`. Per-struct size constants (`EXAMPLE_DATA_MESSAGE_SIZE`) and the module-wide maximum (`EXAMPLE_MAX_SIZE`) are exported as `SCREAMING_SNAKE_CASE` to match the C `#define`s.
@@ -315,6 +315,29 @@ const out = [0];
 const first = exampleModeMessageRead(buffer, 0, out);
 const second = exampleModeMessageRead(buffer, out[0], out);
 ```
+
+### Working with binary transports (WebSocket, fetch, etc.)
+
+Because the read/write functions accept an `ArrayBuffer` or any `ArrayBuffer` view directly, you can hand them the payload from a binary transport without an intermediate copy. A `WebSocket` message is the common case — just make sure the socket is in `arraybuffer` mode, since browsers default `binaryType` to `blob`:
+
+```js
+import { exampleDataMessageRead } from './example_buffers.js';
+
+const ws = new WebSocket(url);
+ws.binaryType = 'arraybuffer';            // event.data is now an ArrayBuffer
+ws.onmessage = (event) => {
+    const msg = exampleDataMessageRead(event.data);   // no copy, no wrapping
+    if (msg !== null) {
+        // handle msg
+    }
+};
+```
+
+The wrapping is always a zero-copy view over the same memory, so this stays cheap even for large frames. A few things worth knowing:
+
+- **`Blob` is not accepted** (it's the browser default for `binaryType`). A `Blob`'s bytes are only available asynchronously, so read it first: `const buf = await blob.arrayBuffer();` then pass `buf`. Node's `ws` library hands you a `Buffer` (a `Uint8Array` subclass) or `ArrayBuffer`, both of which work as-is.
+- **The `offset` argument stacks on a view's own `byteOffset`.** If you pass a `DataView` that starts at byte 100 of its buffer and call with `offset = 8`, it reads at absolute byte 108. Passing a whole `ArrayBuffer` is equivalent to `byteOffset` 0, so `offset` is just the position within it.
+- **Writing into an `ArrayBuffer` mutates it in place.** The view shares memory with the buffer you passed, so after `write` the bytes are already in your `ArrayBuffer` — ready to `ws.send()`.
 
 
 ## Runtime-length arrays
