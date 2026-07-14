@@ -8,7 +8,7 @@ The structs can reference other structs in the file and can contain fixed size a
 
 The generated C code is fast, zero allocation, and flexible, allowing you to stream from and to arbitrary sources using custom callbacks
 
-The generated C# code is fairly efficient, but does allocate, leveraging the GC in order to give you a cleanly typed API. It also renames the definitions to follow dotnet naming guidelines, so `ip_address` becomes `IPAddress`.
+The generated C# code is fairly efficient, but the classic version does allocate, leveraging the GC in order to give you a cleanly typed API. It also renames the definitions to follow dotnet naming guidelines, so `ip_address` becomes `IPAddress`. You can use the C#12 `buffers_gen_cs12.py` version to avoid allocating.
 
 You'll need python installed to run the scripts.
 
