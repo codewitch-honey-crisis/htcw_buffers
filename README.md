@@ -261,6 +261,32 @@ if(exMsg.TryWrite(buffer, out _)) {
 ```
 Note that these serialization methods work with spans, byte arrays, or streams.
 
+### `buffers_gen_cs` vs `buffers_gen_cs12`
+
+There are two C# generators. They parse the same headers and — importantly — emit the **same wire format**, so the choice between them is purely about the C# API and how it's implemented on the managed side. It never changes what goes over the wire, and either one interoperates with the C and JS sides.
+
+- **`buffers_gen_cs`** works on older C# language versions. Fixed arrays and strings are surfaced through a cleanly typed, GC-allocated API (this is the "does allocate, leveraging the GC" behavior described near the top of this README). Pick it when you need to target a language version or runtime that predates the features `buffers_gen_cs12` relies on.
+- **`buffers_gen_cs12`** requires the **C# 12** language version (and .NET 8+, since it depends on `[InlineArray]`). Every fixed array and fixed string is stored *inline* inside the owning struct via a generated `[InlineArray(N)]` helper — there is no per-field heap array behind the property. The default API exposes those fields as `ReadOnlySpan<T>` read views over that inline storage, so reads and the entire serialize/deserialize path are allocation-free. The cleanly typed, allocating surface (`string` / `T[]`) is opt-in per build via `--friendly`; even then a zero-alloc `Get…Span()` accessor is emitted alongside it.
+
+| | `buffers_gen_cs` | `buffers_gen_cs12` |
+|---|---|---|
+| C# language version | pre-12 is fine | **12** required |
+| Key dependency | — | `[InlineArray]` (.NET 8+) |
+| Fixed array / string storage | GC-allocated, typed | inline, in-struct (`[InlineArray]`) |
+| Default field access | typed, allocating | `ReadOnlySpan<T>`, zero-alloc |
+| Cleanly-typed `string` / `T[]` API | always (the default) | opt-in via `--friendly` |
+| Struct layout control | — | `--bltable` or `--reorder` |
+| Wire format | identical | identical |
+
+`buffers_gen_cs12` adds a few options on top of the shared ones listed above:
+- `--friendly` expose allocating `string` / `T[]` members as the primary API (with `Get…Span()` still available), instead of the default span-first surface.
+- `--bltable` emit `[StructLayout(LayoutKind.Sequential, Pack = 1)]` on each struct for a blittable, packed layout. Off by default, because forcing `Pack = 1` can misalign fields and slow member access. Mutually exclusive with `--reorder`.
+- `--reorder` emit `[StructLayout(LayoutKind.Auto)]` so the runtime may reorder fields to reduce padding (which makes the struct non-blittable). Mutually exclusive with `--bltable`.
+
+Inline helper structs are named `<Header>Inline<ClrType>Length<N>` (e.g. `InterfaceInlineUInt32Length1024`), prefixed with the header stem so helpers generated from different headers into the same namespace don't collide.
+
+In short: reach for `buffers_gen_cs12` on .NET 8+ when you want the tighter, lower-allocation API, and `buffers_gen_cs` when you need to support an older language version or runtime.
+
 ## JS code
 Options:
 - `--buffers` generate shared code
