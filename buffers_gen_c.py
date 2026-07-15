@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+htcw_buffers serdes generation script for C
+https://github.com/codewitch-honey-crisis/htcw_buffers
+
 buffers_gen_c.py - Parse wire structs from a C header and generate
                    read/write functions for each struct.
 

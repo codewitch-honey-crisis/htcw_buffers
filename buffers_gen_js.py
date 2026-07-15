@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+htcw_buffers serdes generation script for JS
+https://github.com/codewitch-honey-crisis/htcw_buffers
+
 buffers_gen_js.py - Parse wire structs from a C header and generate
                     JavaScript (ES module) read/write functions for each struct.
 

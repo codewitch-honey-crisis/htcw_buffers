@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+htcw_buffers serdes generation script for C#12
+https://github.com/codewitch-honey-crisis/htcw_buffers
+
 buffers_gen_cs.py - Parse wire structs from a C header and generate
                     C# read/write methods for each struct.
 
