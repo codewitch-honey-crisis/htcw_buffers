@@ -18,12 +18,6 @@ By default strings are prefixed with a length, and then only that number of char
 
 Non-string fixed-size arrays are always sent at their full declared length. The `--lengths` option (see [Runtime-length arrays](#runtime-length-arrays) below) lets you opt specific arrays into runtime-sized serialization by pairing them with a preceding `size_t` count field.
 
-
-#### Disclaimer: 
-
-The JS code has not been field tested yet. That's coming shortly.
-
-
 ### Why not protobuf?
 
 Protobuf is kind of heavy for little devices, and even with nanopb the runtime has a significant footprint.
